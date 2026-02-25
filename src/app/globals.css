@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 213 31% 91%;
+    --card: 222 41% 9%;
+    --card-foreground: 213 31% 91%;
+    --popover: 222 41% 9%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 213 100% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 222 30% 14%;
+    --muted-foreground: 215 20% 55%;
+    --accent: 213 100% 30%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 213 100% 30%;
+    --radius: 0.625rem;
+    --chart-1: 213 100% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(222 41% 9%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(222 30% 20%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(222 30% 28%);
+}
+
+/* Markdown prose styles */
+.prose-goddard {
+  line-height: 1.7;
+}
+.prose-goddard p {
+  margin-bottom: 0.75em;
+}
+.prose-goddard code {
+  background: hsl(222 30% 14%);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.prose-goddard pre {
+  background: hsl(222 41% 7%);
+  border: 1px solid hsl(222 30% 18%);
+  border-radius: 8px;
+  padding: 1em;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.prose-goddard pre code {
+  background: none;
+  padding: 0;
+}
+.prose-goddard ul, .prose-goddard ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+.prose-goddard li {
+  margin-bottom: 0.25em;
+}
+.prose-goddard h1, .prose-goddard h2, .prose-goddard h3 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+.prose-goddard blockquote {
+  border-left: 3px solid hsl(213 100% 30%);
+  padding-left: 1em;
+  color: hsl(215 20% 55%);
+  margin: 0.75em 0;
+}

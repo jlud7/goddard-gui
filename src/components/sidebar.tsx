@@ -9,12 +9,14 @@ import {
   Clock,
   Brain,
   Settings,
+  Hash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/topics", label: "Topics", icon: Hash },
   { href: "/sessions", label: "Sessions", icon: List },
   { href: "/cron", label: "Cron", icon: Clock },
   { href: "/memory", label: "Memory", icon: Brain },
@@ -61,7 +63,7 @@ export function Sidebar() {
         </nav>
         <div className="p-4 border-t border-border">
           <p className="text-xs text-muted-foreground text-center">
-            Goddard GUI v1.0
+            Goddard GUI v2.0
           </p>
         </div>
       </aside>

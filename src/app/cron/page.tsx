@@ -14,6 +14,13 @@ import { Switch } from "@/components/ui/switch";
 import { Clock, RefreshCw, Play, Loader2 } from "lucide-react";
 import { GatewayClient, isConfigured, getDetails } from "@/lib/api";
 
+interface CronSchedule {
+  kind?: string;
+  expr?: string;
+  tz?: string;
+  [key: string]: unknown;
+}
+
 interface CronJobState {
   nextRunAtMs?: number;
   lastRunAtMs?: number;
@@ -25,12 +32,25 @@ interface CronJob {
   id: string;
   name?: string;
   description?: string;
-  schedule?: string;
+  schedule?: CronSchedule | string;
   enabled?: boolean;
   sessionTarget?: string;
   payload?: unknown;
   state?: CronJobState;
   [key: string]: unknown;
+}
+
+function getScheduleDisplay(schedule?: CronSchedule | string): string {
+  if (!schedule) return "";
+  if (typeof schedule === "string") return schedule;
+  if (typeof schedule === "object") {
+    const parts: string[] = [];
+    if (schedule.expr) parts.push(schedule.expr);
+    if (schedule.tz) parts.push(`(${schedule.tz})`);
+    if (parts.length === 0 && schedule.kind) return schedule.kind;
+    return parts.join(" ");
+  }
+  return String(schedule);
 }
 
 export default function CronPage() {
@@ -56,7 +76,7 @@ export default function CronPage() {
       });
       const details = getDetails(result);
       const arr = details.jobs;
-      setJobs(Array.isArray(arr) ? arr as CronJob[] : []);
+      setJobs(Array.isArray(arr) ? (arr as CronJob[]) : []);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load cron jobs");
     } finally {
@@ -113,6 +133,90 @@ export default function CronPage() {
     }
   };
 
+  const renderJobs = () => {
+    try {
+      return jobs.map((job) => {
+        const lastRun = formatTime(job.state?.lastRunAtMs);
+        const nextRun = formatTime(job.state?.nextRunAtMs);
+        const scheduleStr = getScheduleDisplay(job.schedule);
+        return (
+          <Card key={job.id}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <CardTitle className="text-base truncate">
+                    {job.name || job.id}
+                  </CardTitle>
+                  <Badge
+                    variant={job.enabled !== false ? "default" : "secondary"}
+                  >
+                    {job.enabled !== false ? "Active" : "Disabled"}
+                  </Badge>
+                  {job.state?.lastRunStatus && (
+                    <Badge
+                      variant={
+                        job.state.lastRunStatus === "ok"
+                          ? "default"
+                          : "destructive"
+                      }
+                      className="text-xs"
+                    >
+                      {job.state.lastRunStatus}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Switch
+                    checked={job.enabled !== false}
+                    onCheckedChange={(checked) => toggleJob(job.id, checked)}
+                    disabled={actionLoading === job.id}
+                  />
+                </div>
+              </div>
+              {job.description && (
+                <CardDescription>{job.description}</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                {scheduleStr && (
+                  <span className="font-mono bg-secondary px-2 py-0.5 rounded">
+                    {scheduleStr}
+                  </span>
+                )}
+                {lastRun && <span>Last: {lastRun}</span>}
+                {nextRun && <span>Next: {nextRun}</span>}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => runJob(job.id)}
+                  disabled={actionLoading === `run-${job.id}`}
+                  className="gap-1.5 ml-auto"
+                >
+                  {actionLoading === `run-${job.id}` ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Play className="h-3 w-3" />
+                  )}
+                  Run Now
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      });
+    } catch (renderErr: unknown) {
+      return (
+        <Card className="border-destructive">
+          <CardContent className="py-4 text-destructive text-sm">
+            Render error:{" "}
+            {renderErr instanceof Error ? renderErr.message : "Unknown error"}
+          </CardContent>
+        </Card>
+      );
+    }
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -155,79 +259,7 @@ export default function CronPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => {
-            const lastRun = formatTime(job.state?.lastRunAtMs);
-            const nextRun = formatTime(job.state?.nextRunAtMs);
-            return (
-              <Card key={job.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <CardTitle className="text-base truncate">
-                        {job.name || job.id}
-                      </CardTitle>
-                      <Badge
-                        variant={
-                          job.enabled !== false ? "default" : "secondary"
-                        }
-                      >
-                        {job.enabled !== false ? "Active" : "Disabled"}
-                      </Badge>
-                      {job.state?.lastRunStatus && (
-                        <Badge
-                          variant={
-                            job.state.lastRunStatus === "ok"
-                              ? "default"
-                              : "destructive"
-                          }
-                          className="text-xs"
-                        >
-                          {job.state.lastRunStatus}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Switch
-                        checked={job.enabled !== false}
-                        onCheckedChange={(checked) => toggleJob(job.id, checked)}
-                        disabled={actionLoading === job.id}
-                      />
-                    </div>
-                  </div>
-                  {job.description && (
-                    <CardDescription>{job.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                    {job.schedule && (
-                      <span className="font-mono bg-secondary px-2 py-0.5 rounded">
-                        {job.schedule}
-                      </span>
-                    )}
-                    {lastRun && <span>Last: {lastRun}</span>}
-                    {nextRun && <span>Next: {nextRun}</span>}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => runJob(job.id)}
-                      disabled={actionLoading === `run-${job.id}`}
-                      className="gap-1.5 ml-auto"
-                    >
-                      {actionLoading === `run-${job.id}` ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Play className="h-3 w-3" />
-                      )}
-                      Run Now
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <div className="space-y-3">{renderJobs()}</div>
       )}
     </div>
   );

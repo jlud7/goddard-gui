@@ -1,32 +1,45 @@
 const STORAGE_KEY_URL = "goddard-gateway-url";
 const STORAGE_KEY_TOKEN = "goddard-gateway-token";
+const STORAGE_KEY_MODE = "goddard-connection-mode";
 
-export function getGatewayConfig(): { url: string; token: string } {
-  if (typeof window === "undefined") return { url: "", token: "" };
+export type ConnectionMode = "proxy" | "direct";
+
+export function getGatewayConfig(): {
+  url: string;
+  token: string;
+  mode: ConnectionMode;
+} {
+  if (typeof window === "undefined") return { url: "", token: "", mode: "proxy" };
   return {
     url: localStorage.getItem(STORAGE_KEY_URL) || "",
     token: localStorage.getItem(STORAGE_KEY_TOKEN) || "",
+    mode: (localStorage.getItem(STORAGE_KEY_MODE) as ConnectionMode) || "proxy",
   };
 }
 
-export function setGatewayConfig(url: string, token: string) {
+export function setGatewayConfig(url: string, token: string, mode?: ConnectionMode) {
   localStorage.setItem(STORAGE_KEY_URL, url);
   localStorage.setItem(STORAGE_KEY_TOKEN, token);
+  if (mode) localStorage.setItem(STORAGE_KEY_MODE, mode);
 }
 
 export function isConfigured(): boolean {
-  const { url, token } = getGatewayConfig();
+  // Proxy mode works without user config (server has env vars)
+  const { mode, url, token } = getGatewayConfig();
+  if (mode === "proxy") return true;
   return !!(url && token);
 }
 
 export class GatewayClient {
   private baseUrl: string;
   private token: string;
+  private mode: ConnectionMode;
 
-  constructor(baseUrl?: string, token?: string) {
+  constructor(baseUrl?: string, token?: string, mode?: ConnectionMode) {
     const config = getGatewayConfig();
     this.baseUrl = (baseUrl || config.url).replace(/\/+$/, "");
     this.token = token || config.token;
+    this.mode = mode || config.mode || "proxy";
   }
 
   private headers(): Record<string, string> {
@@ -40,6 +53,17 @@ export class GatewayClient {
     tool: string,
     args?: Record<string, unknown>
   ): Promise<T> {
+    if (this.mode === "proxy") {
+      const res = await fetch("/api/gateway", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool, args }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error?.message || "Unknown error");
+      return data.result as T;
+    }
+
     const res = await fetch(`${this.baseUrl}/tools/invoke`, {
       method: "POST",
       headers: this.headers(),
@@ -52,6 +76,16 @@ export class GatewayClient {
 
   async testConnection(): Promise<boolean> {
     try {
+      if (this.mode === "proxy") {
+        const res = await fetch("/api/gateway", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tool: "session_status" }),
+        });
+        const data = await res.json();
+        return !!data.ok;
+      }
+
       const res = await fetch(`${this.baseUrl}/tools/invoke`, {
         method: "POST",
         headers: this.headers(),
@@ -67,15 +101,30 @@ export class GatewayClient {
   async *chatStream(
     messages: { role: string; content: string }[]
   ): AsyncGenerator<string, void, unknown> {
-    const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
-        model: "openclaw:main",
-        messages,
-        stream: true,
-      }),
-    });
+    let res: Response;
+
+    if (this.mode === "proxy") {
+      res = await fetch("/api/gateway", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: "chat",
+          model: "openclaw:main",
+          messages,
+          stream: true,
+        }),
+      });
+    } else {
+      res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          model: "openclaw:main",
+          messages,
+          stream: true,
+        }),
+      });
+    }
 
     if (!res.ok) {
       const text = await res.text();

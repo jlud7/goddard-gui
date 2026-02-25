@@ -114,6 +114,46 @@ export class GatewayClient {
     }
   }
 
+  async chat(
+    messages: { role: string; content: string }[]
+  ): Promise<string> {
+    let res: Response;
+
+    if (this.mode === "proxy") {
+      res = await fetch("/api/gateway", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-dashboard-auth": getDashboardPassword(),
+        },
+        body: JSON.stringify({
+          endpoint: "chat",
+          model: "openclaw:main",
+          messages,
+          stream: false,
+        }),
+      });
+    } else {
+      res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          model: "openclaw:main",
+          messages,
+          stream: false,
+        }),
+      });
+    }
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Chat error: ${res.status} ${text}`);
+    }
+
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || "";
+  }
+
   async *chatStream(
     messages: { role: string; content: string }[]
   ): AsyncGenerator<string, void, unknown> {

@@ -12,16 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Brain, RefreshCw, Loader2, FileText } from "lucide-react";
-import { GatewayClient, isConfigured } from "@/lib/api";
+import { GatewayClient, isConfigured, getText, getDetails } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
-
-interface ExecResult {
-  stdout?: string;
-  stderr?: string;
-  exitCode?: number;
-  output?: string;
-  [key: string]: unknown;
-}
 
 export default function MemoryPage() {
   const [mainMemory, setMainMemory] = useState<string>("");
@@ -42,39 +34,99 @@ export default function MemoryPage() {
     try {
       const client = new GatewayClient();
 
-      // Load MEMORY.md
-      const memResult = await client.invoke<ExecResult>("exec", {
-        command: "cat MEMORY.md 2>/dev/null || echo '(No MEMORY.md found)'",
-      });
-      setMainMemory(
-        memResult?.stdout || memResult?.output || String(memResult) || ""
-      );
-
-      // List and load daily memory files
+      // Load MEMORY.md via memory_get
       try {
-        const listResult = await client.invoke<ExecResult>("exec", {
-          command:
-            "ls -1 memory/*.md 2>/dev/null | sort -r | head -10",
-        });
-        const files = (listResult?.stdout || listResult?.output || "")
-          .split("\n")
-          .filter((f: string) => f.trim());
+        const memResult = await client.invoke("memory_get", { path: "MEMORY.md" });
+        const text = getText(memResult);
+        setMainMemory(text || "(No MEMORY.md found)");
+      } catch {
+        setMainMemory("(Unable to load MEMORY.md)");
+      }
 
-        const dailyResults = await Promise.all(
-          files.map(async (f: string) => {
-            const res = await client.invoke<ExecResult>("exec", {
-              command: `cat "${f}"`,
-            });
-            return {
-              name: f.replace("memory/", ""),
-              content: res?.stdout || res?.output || String(res) || "",
-            };
+      // Load daily memory files
+      // Generate recent date paths to check (last 14 days)
+      const dailyResults: { name: string; content: string }[] = [];
+
+      // Use memory_search to discover daily files
+      try {
+        const searchResult = await client.invoke("memory_search", {
+          query: "daily notes memory log",
+          maxResults: 30,
+        });
+        const details = getDetails(searchResult);
+        const text = getText(searchResult);
+
+        // Extract unique file paths from search results
+        const paths = new Set<string>();
+
+        // Check details for results array
+        const results = details.results || details.matches || details.entries;
+        if (Array.isArray(results)) {
+          for (const r of results) {
+            const p = (r as Record<string, unknown>).path || (r as Record<string, unknown>).file;
+            if (typeof p === "string" && p.match(/memory\/\d{4}-\d{2}-\d{2}\.md/)) {
+              paths.add(p);
+            }
+          }
+        }
+
+        // Also try to extract paths from text content
+        if (text) {
+          const pathMatches = text.match(/memory\/\d{4}-\d{2}-\d{2}\.md/g);
+          if (pathMatches) {
+            for (const p of pathMatches) paths.add(p);
+          }
+        }
+
+        // If search didn't find paths, try recent dates directly
+        if (paths.size === 0) {
+          const today = new Date();
+          for (let i = 0; i < 14; i++) {
+            const d = new Date(today);
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split("T")[0];
+            paths.add(`memory/${dateStr}.md`);
+          }
+        }
+
+        // Fetch each daily file
+        const sortedPaths = Array.from(paths).sort().reverse();
+        const fetches = await Promise.allSettled(
+          sortedPaths.map(async (p) => {
+            const res = await client.invoke("memory_get", { path: p });
+            const content = getText(res);
+            if (content && !content.includes("not found") && !content.includes("ENOENT")) {
+              return { name: p.replace("memory/", ""), content };
+            }
+            return null;
           })
         );
-        setDailyFiles(dailyResults);
+
+        for (const f of fetches) {
+          if (f.status === "fulfilled" && f.value) {
+            dailyResults.push(f.value);
+          }
+        }
       } catch {
-        setDailyFiles([]);
+        // Fallback: try recent dates directly
+        const today = new Date();
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split("T")[0];
+          try {
+            const res = await client.invoke("memory_get", { path: `memory/${dateStr}.md` });
+            const content = getText(res);
+            if (content && !content.includes("not found") && !content.includes("ENOENT")) {
+              dailyResults.push({ name: `${dateStr}.md`, content });
+            }
+          } catch {
+            // File doesn't exist, skip
+          }
+        }
       }
+
+      setDailyFiles(dailyResults);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load memory");
     } finally {

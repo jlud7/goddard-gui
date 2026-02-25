@@ -49,16 +49,20 @@ export default function ChatPage() {
 
     try {
       const client = new GatewayClient();
-      const response = await client.chat(
+      const stream = client.chatStream(
         newMessages.map((m) => ({ role: m.role, content: m.content }))
       );
 
-      if (response) {
+      let accumulated = "";
+      for await (const chunk of stream) {
+        accumulated += chunk;
         setMessages([
           ...newMessages,
-          { role: "assistant", content: response },
+          { role: "assistant", content: accumulated },
         ]);
-      } else {
+      }
+
+      if (!accumulated) {
         setMessages([
           ...newMessages,
           { role: "assistant", content: "(No response received)" },

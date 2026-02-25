@@ -27,44 +27,42 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { endpoint, ...payload } = body;
 
-    const url = endpoint === 'chat'
-      ? `${GATEWAY_URL}/v1/chat/completions`
-      : `${GATEWAY_URL}/tools/invoke`;
-
-    const fetchRes = await fetch(url, {
+    const fetchRes = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${gatewayToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(endpoint === 'chat' ? payload : { tool: body.tool, args: body.args }),
+      body: JSON.stringify({
+        model: 'openclaw:main',
+        messages: body.messages,
+        stream: true,
+      }),
     });
 
-    const text = await fetchRes.text();
-
-    try {
-      const data = JSON.parse(text);
-      return NextResponse.json(data, { status: fetchRes.status });
-    } catch {
+    if (!fetchRes.ok) {
+      const text = await fetchRes.text();
       return NextResponse.json(
-        { ok: false, error: { message: `Gateway error (${fetchRes.status}): ${text.slice(0, 200)}` } },
-        { status: 502 }
+        { ok: false, error: { message: `Gateway error: ${text.slice(0, 200)}` } },
+        { status: fetchRes.status }
       );
     }
+
+    // Pass through the SSE stream
+    return new NextResponse(fetchRes.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Proxy error';
+    const message = error instanceof Error ? error.message : 'Stream error';
     return NextResponse.json(
       { ok: false, error: { message } },
       { status: 502 }
     );
   }
-}
-
-export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  return NextResponse.json({ ok: true, configured: true });
 }

@@ -20,16 +20,24 @@ import {
   Activity,
   Settings,
 } from "lucide-react";
-import { GatewayClient, isConfigured } from "@/lib/api";
+import { GatewayClient, isConfigured, getDetails } from "@/lib/api";
 
 interface SessionInfo {
-  id: string;
+  key: string;
+  kind?: string;
+  channel?: string;
+  displayName?: string;
+  updatedAt?: string;
+  model?: string;
+  contextTokens?: number;
+  totalTokens?: number;
   [key: string]: unknown;
 }
 
 interface CronJob {
   id: string;
   enabled?: boolean;
+  name?: string;
   [key: string]: unknown;
 }
 
@@ -57,20 +65,22 @@ export default function DashboardPage() {
 
         if (ok) {
           const [sessRes, cronRes] = await Promise.allSettled([
-            client.invoke<SessionInfo[]>("sessions_list"),
-            client.invoke<CronJob[]>("cron", {
+            client.invoke("sessions_list", { activeMinutes: 10080 }),
+            client.invoke("cron", {
               action: "list",
               includeDisabled: true,
             }),
           ]);
           if (!cancelled) {
             if (sessRes.status === "fulfilled") {
-              const val = sessRes.value;
-              setSessions(Array.isArray(val) ? val : []);
+              const details = getDetails(sessRes.value);
+              const arr = details.sessions;
+              setSessions(Array.isArray(arr) ? arr as SessionInfo[] : []);
             }
             if (cronRes.status === "fulfilled") {
-              const val = cronRes.value;
-              setCronJobs(Array.isArray(val) ? val : []);
+              const details = getDetails(cronRes.value);
+              const arr = details.jobs;
+              setCronJobs(Array.isArray(arr) ? arr as CronJob[] : []);
             }
           }
         }
@@ -148,7 +158,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" /> Sessions
+              <MessageSquare className="h-4 w-4" /> Sessions (7d)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -237,12 +247,26 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {sessions.slice(0, 5).map((sess, i) => (
                 <div
-                  key={sess.id || i}
+                  key={sess.key || i}
                   className="flex items-center justify-between p-3 bg-secondary rounded-lg"
                 >
-                  <span className="text-sm font-mono truncate max-w-[60%]">
-                    {sess.id || `Session ${i + 1}`}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-mono truncate block">
+                      {sess.displayName || sess.key}
+                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {sess.channel && (
+                        <Badge variant="secondary" className="text-xs">
+                          {sess.channel}
+                        </Badge>
+                      )}
+                      {sess.model && (
+                        <span className="text-xs text-muted-foreground">
+                          {sess.model}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <Link href="/sessions">
                     <Button variant="ghost" size="sm">
                       View

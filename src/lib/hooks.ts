@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { GatewayClient, isConfigured } from "./api";
+import { GatewayClient, isConfigured, ToolResponse } from "./api";
 
 export function useGateway() {
   const [configured, setConfigured] = useState(false);
@@ -22,13 +22,13 @@ export function useGateway() {
   return { configured, client, refresh };
 }
 
-export function useInvoke<T = unknown>(
+export function useInvoke(
   tool: string,
   args?: Record<string, unknown>,
   deps: unknown[] = []
 ) {
   const { client } = useGateway();
-  const [data, setData] = useState<T | null>(null);
+  const [data, setData] = useState<ToolResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +37,7 @@ export function useInvoke<T = unknown>(
     setLoading(true);
     setError(null);
     try {
-      const result = await client.invoke<T>(tool, args);
+      const result = await client.invoke(tool, args);
       setData(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");

@@ -5,19 +5,17 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   MessageSquare,
-  List,
   Clock,
   Brain,
   Settings,
-  Hash,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/topics", label: "Topics", icon: Hash },
-  { href: "/sessions", label: "Sessions", icon: List },
+  { href: "/conversations", label: "Chat", icon: MessageSquare },
+  { href: "/tasks", label: "Tasks", icon: Activity },
   { href: "/cron", label: "Cron", icon: Clock },
   { href: "/memory", label: "Memory", icon: Brain },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -28,7 +26,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex md:flex-col md:w-64 bg-card border-r border-border h-screen fixed left-0 top-0 z-40">
         <div className="p-6 border-b border-border">
           <Link href="/" className="flex items-center gap-3">
@@ -63,12 +60,11 @@ export function Sidebar() {
         </nav>
         <div className="p-4 border-t border-border">
           <p className="text-xs text-muted-foreground text-center">
-            Goddard GUI v2.0
+            Goddard GUI v3.0
           </p>
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40 flex justify-around py-2 px-1">
         {navItems.map((item) => {
           const active =

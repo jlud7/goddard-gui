@@ -10,35 +10,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Brain, RefreshCw, Loader2, FileText } from "lucide-react";
 import { GatewayClient, isConfigured, getDetails } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 
-/**
- * Extract readable text from a tool result.
- * Handles the shape: { content: [{ type: "text", text: "..." }] }
- * Also un-escapes literal \n sequences that sometimes appear in the JSON.
- */
 function extractText(result: unknown): string {
   if (!result || typeof result !== "object") return "";
   const res = result as Record<string, unknown>;
-
-  // Try result.content[0].text
   if (Array.isArray(res.content) && res.content.length > 0) {
     const first = res.content[0];
     if (first && typeof first === "object" && "text" in first) {
       const raw = String((first as Record<string, unknown>).text ?? "");
-      // Replace literal \n (two chars) with actual newlines if needed
       return raw.replace(/\\n/g, "\n");
     }
   }
-
-  // Fallback: if it's just a string at top level
   if (typeof res.text === "string") {
     return res.text.replace(/\\n/g, "\n");
   }
-
   return "";
 }
 
@@ -61,7 +49,6 @@ export default function MemoryPage() {
     try {
       const client = new GatewayClient();
 
-      // Load MEMORY.md via memory_get
       try {
         const memResult = await client.invoke("memory_get", { path: "MEMORY.md" });
         const text = extractText(memResult);
@@ -70,10 +57,8 @@ export default function MemoryPage() {
         setMainMemory("(Unable to load MEMORY.md)");
       }
 
-      // Load daily memory files
       const dailyResults: { name: string; content: string }[] = [];
 
-      // Use memory_search to discover daily files
       try {
         const searchResult = await client.invoke("memory_search", {
           query: "daily notes memory log",
@@ -82,10 +67,8 @@ export default function MemoryPage() {
         const details = getDetails(searchResult);
         const text = extractText(searchResult);
 
-        // Extract unique file paths from search results
         const paths = new Set<string>();
 
-        // Check details for results array
         const results = details.results || details.matches || details.entries;
         if (Array.isArray(results)) {
           for (const r of results) {
@@ -96,7 +79,6 @@ export default function MemoryPage() {
           }
         }
 
-        // Also try to extract paths from text content
         if (text) {
           const pathMatches = text.match(/memory\/\d{4}-\d{2}-\d{2}\.md/g);
           if (pathMatches) {
@@ -104,7 +86,6 @@ export default function MemoryPage() {
           }
         }
 
-        // If search didn't find paths, try recent dates directly
         if (paths.size === 0) {
           const today = new Date();
           for (let i = 0; i < 14; i++) {
@@ -115,7 +96,6 @@ export default function MemoryPage() {
           }
         }
 
-        // Fetch each daily file
         const sortedPaths = Array.from(paths).sort().reverse();
         const fetches = await Promise.allSettled(
           sortedPaths.map(async (p) => {
@@ -134,7 +114,6 @@ export default function MemoryPage() {
           }
         }
       } catch {
-        // Fallback: try recent dates directly
         const today = new Date();
         for (let i = 0; i < 7; i++) {
           const d = new Date(today);
@@ -147,7 +126,7 @@ export default function MemoryPage() {
               dailyResults.push({ name: `${dateStr}.md`, content });
             }
           } catch {
-            // File doesn't exist, skip
+            // skip
           }
         }
       }
@@ -218,11 +197,11 @@ export default function MemoryPage() {
           <TabsContent value="main">
             <Card>
               <CardContent className="py-6">
-                <ScrollArea className="max-h-[70vh]">
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
                   <div className="prose-goddard text-sm leading-relaxed">
                     <ReactMarkdown>{mainMemory}</ReactMarkdown>
                   </div>
-                </ScrollArea>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -245,11 +224,11 @@ export default function MemoryPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ScrollArea className="max-h-[400px]">
+                      <div className="max-h-[60vh] overflow-y-auto pr-2">
                         <div className="prose-goddard text-sm leading-relaxed">
                           <ReactMarkdown>{file.content}</ReactMarkdown>
                         </div>
-                      </ScrollArea>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}

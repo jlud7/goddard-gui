@@ -1,8 +1,18 @@
 const STORAGE_KEY_URL = "goddard-gateway-url";
 const STORAGE_KEY_TOKEN = "goddard-gateway-token";
 const STORAGE_KEY_MODE = "goddard-connection-mode";
+const STORAGE_KEY_PASSWORD = "goddard-dashboard-password";
 
 export type ConnectionMode = "proxy" | "direct";
+
+export function getDashboardPassword(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(STORAGE_KEY_PASSWORD) || "";
+}
+
+export function setDashboardPassword(pw: string) {
+  localStorage.setItem(STORAGE_KEY_PASSWORD, pw);
+}
 
 export function getGatewayConfig(): {
   url: string;
@@ -56,7 +66,10 @@ export class GatewayClient {
     if (this.mode === "proxy") {
       const res = await fetch("/api/gateway", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-dashboard-auth": getDashboardPassword(),
+        },
         body: JSON.stringify({ tool, args }),
       });
       const data = await res.json();
@@ -79,7 +92,10 @@ export class GatewayClient {
       if (this.mode === "proxy") {
         const res = await fetch("/api/gateway", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-dashboard-auth": getDashboardPassword(),
+          },
           body: JSON.stringify({ tool: "session_status" }),
         });
         const data = await res.json();
@@ -106,7 +122,10 @@ export class GatewayClient {
     if (this.mode === "proxy") {
       res = await fetch("/api/gateway", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-dashboard-auth": getDashboardPassword(),
+        },
         body: JSON.stringify({
           endpoint: "chat",
           model: "openclaw:main",

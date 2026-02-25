@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
+import AuthGate from "@/components/auth-gate";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,8 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={inter.className}>
-        <Sidebar />
-        <main className="md:ml-64 min-h-screen pb-20 md:pb-0">{children}</main>
+        <AuthGate>
+          <Sidebar />
+          <main className="md:ml-64 min-h-screen pb-20 md:pb-0">{children}</main>
+        </AuthGate>
       </body>
     </html>
   );

@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function checkAuth(req: NextRequest): boolean {
+  const dashPassword = process.env.DASHBOARD_PASSWORD;
+  if (!dashPassword) return true; // No password configured = open (shouldn't happen in prod)
+  
+  const authHeader = req.headers.get('x-dashboard-auth') || '';
+  return authHeader === dashPassword;
+}
+
 export async function POST(req: NextRequest) {
+  if (!checkAuth(req)) {
+    return NextResponse.json(
+      { ok: false, error: { message: 'Unauthorized' } },
+      { status: 401 }
+    );
+  }
+
   const gatewayUrl = (process.env.GATEWAY_URL || '').replace(/\/+$/, '');
   const gatewayToken = process.env.GATEWAY_TOKEN;
 
@@ -40,13 +55,12 @@ export async function POST(req: NextRequest) {
 
     const text = await fetchRes.text();
     
-    // Try to parse as JSON
     try {
       const data = JSON.parse(text);
       return NextResponse.json(data, { status: fetchRes.status });
     } catch {
       return NextResponse.json(
-        { ok: false, error: { message: `Gateway returned non-JSON (${fetchRes.status}): ${text.slice(0, 200)}`, url: url } },
+        { ok: false, error: { message: `Gateway returned non-JSON (${fetchRes.status}): ${text.slice(0, 200)}` } },
         { status: 502 }
       );
     }
@@ -59,13 +73,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!checkAuth(req)) {
+    return NextResponse.json({ configured: false, error: 'Unauthorized' }, { status: 401 });
+  }
   const gatewayUrl = process.env.GATEWAY_URL;
   const gatewayToken = process.env.GATEWAY_TOKEN;
   return NextResponse.json({
     configured: !!(gatewayUrl && gatewayToken),
     urlSet: !!gatewayUrl,
     tokenSet: !!gatewayToken,
-    urlPreview: gatewayUrl ? gatewayUrl.slice(0, 30) + '...' : 'missing',
   });
 }

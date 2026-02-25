@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const gatewayUrl = process.env.GATEWAY_URL;
+  const gatewayUrl = (process.env.GATEWAY_URL || '').replace(/\/+$/, '');
   const gatewayToken = process.env.GATEWAY_TOKEN;
 
   if (!gatewayUrl || !gatewayToken) {
     return NextResponse.json(
-      { ok: false, error: { message: 'Gateway not configured on server' } },
+      { ok: false, error: { message: `Gateway not configured. URL: ${gatewayUrl ? 'set' : 'missing'}, Token: ${gatewayToken ? 'set' : 'missing'}` } },
       { status: 500 }
     );
   }
@@ -19,13 +19,13 @@ export async function POST(req: NextRequest) {
       ? `${gatewayUrl}/v1/chat/completions`
       : `${gatewayUrl}/tools/invoke`;
 
-    const res = await fetch(url, {
+    const fetchRes = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${gatewayToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(endpoint === 'chat' ? payload : { tool: body.tool, args: body.args }),
     });
 
     // For streaming chat responses
@@ -35,11 +35,21 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       });
-      return new NextResponse(res.body, { status: 200, headers });
+      return new NextResponse(fetchRes.body, { status: 200, headers });
     }
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    const text = await fetchRes.text();
+    
+    // Try to parse as JSON
+    try {
+      const data = JSON.parse(text);
+      return NextResponse.json(data, { status: fetchRes.status });
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: { message: `Gateway returned non-JSON (${fetchRes.status}): ${text.slice(0, 200)}`, url: url } },
+        { status: 502 }
+      );
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Proxy error';
     return NextResponse.json(
@@ -47,4 +57,15 @@ export async function POST(req: NextRequest) {
       { status: 502 }
     );
   }
+}
+
+export async function GET() {
+  const gatewayUrl = process.env.GATEWAY_URL;
+  const gatewayToken = process.env.GATEWAY_TOKEN;
+  return NextResponse.json({
+    configured: !!(gatewayUrl && gatewayToken),
+    urlSet: !!gatewayUrl,
+    tokenSet: !!gatewayToken,
+    urlPreview: gatewayUrl ? gatewayUrl.slice(0, 30) + '...' : 'missing',
+  });
 }

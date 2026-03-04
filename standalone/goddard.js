@@ -1,6 +1,6 @@
 // ── State ──
-let ws, rid=0, pend={}, isConn=false, sessions=[], crons=[], channels=null, gwInfo=null;
-let clockIv, countIv;
+let ws, rid=0, pend={}, isConn=false, sessions=[], crons=[], channels=null, gwInfo=null, gwHealth=null;
+let clockIv, countIv, marketsIv;
 
 // Topic name mapping
 const TOPIC_NAMES = {
@@ -12,15 +12,82 @@ const TOPIC_NAMES = {
   '563': 'Dashboard'
 };
 
+// Markets config
+const MARKET_SECTIONS = [
+  {
+    id: 'indices', label: 'Indices', icon: '📊',
+    tickers: [
+      { sym: '^GSPC',  name: 'S&P 500' },
+      { sym: '^IXIC',  name: 'Nasdaq' },
+      { sym: '^DJI',   name: 'Dow Jones' },
+      { sym: '^RUT',   name: 'Russell 2000' }
+    ]
+  },
+  {
+    id: 'rates', label: 'Rates', icon: '🏦',
+    tickers: [
+      { sym: '^TNX',  name: '10Y Treasury' },
+      { sym: '^IRX',  name: '2Y Treasury' },
+      { sym: '^TYX',  name: '30Y Treasury' }
+    ]
+  },
+  {
+    id: 'fx', label: 'FX', icon: '💱',
+    tickers: [
+      { sym: 'DX-Y.NYB', name: 'DXY (Dollar Index)' },
+      { sym: 'EURUSD=X',  name: 'EUR/USD' },
+      { sym: 'JPY=X',     name: 'USD/JPY' },
+      { sym: 'GBPUSD=X',  name: 'GBP/USD' }
+    ]
+  },
+  {
+    id: 'commodities', label: 'Commodities', icon: '🪙',
+    tickers: [
+      { sym: 'GC=F',  name: 'Gold' },
+      { sym: 'SI=F',  name: 'Silver' },
+      { sym: 'CL=F',  name: 'Crude Oil' },
+      { sym: 'HG=F',  name: 'Copper' },
+      { sym: 'URA',   name: 'Uranium ETF (URA)' }
+    ]
+  },
+  {
+    id: 'crypto', label: 'Crypto', icon: '₿',
+    tickers: [
+      { sym: 'BTC-USD', name: 'Bitcoin' },
+      { sym: 'ETH-USD', name: 'Ethereum' },
+      { sym: 'SOL-USD', name: 'Solana' }
+    ]
+  },
+  {
+    id: 'airlines', label: 'Airlines', icon: '✈️',
+    tickers: [
+      { sym: 'DAL',  name: 'Delta Air Lines' },
+      { sym: 'AAL',  name: 'American Airlines' },
+      { sym: 'LUV',  name: 'Southwest Airlines' },
+      { sym: 'ALK',  name: 'Alaska Air' },
+      { sym: 'JBLU', name: 'JetBlue' },
+      { sym: 'UAL',  name: 'United Airlines' }
+    ]
+  },
+  {
+    id: 'watchlist', label: 'Watchlist', icon: '👁',
+    tickers: [
+      { sym: 'URA',  name: 'Uranium (URA)' },
+      { sym: 'COPX', name: 'Copper Miners (COPX)' },
+      { sym: 'GRID', name: 'Grid Infrastructure (GRID)' },
+      { sym: 'IAU',  name: 'Gold (IAU)' }
+    ]
+  }
+];
+
 // ── Persistence ──
 const ls = (k,d) => { try { return localStorage.getItem('g_'+k)||d } catch { return d } };
 const ss = (k,v) => { try { localStorage.setItem('g_'+k,v) } catch {} };
 
 // ── Init ──
 window.addEventListener('DOMContentLoaded', () => {
-  // Auto-detect WebSocket URL from page origin
-  const defaultWs = location.protocol === 'https:' 
-    ? 'wss://' + location.host 
+  const defaultWs = location.protocol === 'https:'
+    ? 'wss://' + location.host
     : 'ws://' + location.host;
   document.getElementById('in-url').value = ls('url', defaultWs);
   document.getElementById('in-token').value = ls('token','');
@@ -31,26 +98,22 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── Event Delegation ──
 function bindEvents() {
-  // Connect button
   document.getElementById('btn-connect').addEventListener('click', doConnect);
-  // Mobile sidebar toggle
   document.getElementById('btn-toggle-sidebar').addEventListener('click', toggleSidebar);
-  // Panel overlay & close
   document.getElementById('panel-ov').addEventListener('click', closePanel);
   document.getElementById('btn-panel-close').addEventListener('click', closePanel);
 
-  // Delegated click handler for data-action elements
   document.body.addEventListener('click', function(e) {
     const el = e.target.closest('[data-action]');
     if (!el) return;
     const action = el.dataset.action;
     if (action === 'go') go(el.dataset.target);
-    else if (action === 'trigger-job') triggerJob(el.dataset.job);
     else if (action === 'refresh') { refreshAll(); toast('Refreshed'); }
     else if (action === 'disconnect') doDisconnect();
     else if (action === 'refresh-sessions') loadSessions();
     else if (action === 'refresh-cron') loadCron();
     else if (action === 'refresh-channels') loadChannels();
+    else if (action === 'refresh-markets') loadMarkets();
     else if (action === 'show-cron-panel') showCronPanel(el.dataset.jobId);
     else if (action === 'run-job') runJob(el.dataset.jobId);
     else if (action === 'toggle-job') toggleJob(el.dataset.jobId, el.dataset.enable === 'true');
@@ -71,20 +134,16 @@ function doConnect() {
   connectSent = false;
   try { ws = new WebSocket(url); } catch(e) { return connErr('Bad URL: '+e.message); }
   ws.onopen = () => {
-    // Wait for connect.challenge event before sending connect
-    // Set a timeout in case the gateway doesn't send a challenge (older protocol)
     setTimeout(() => { if (!connectSent) sendConnectRpc(token, null); }, 1500);
   };
   ws.onmessage = ev => {
     try {
       const m = JSON.parse(ev.data);
-      // Handle connect.challenge event
       if (m.type === 'event' && m.event === 'connect.challenge') {
         connectNonce = m.payload?.nonce || null;
         if (!connectSent) sendConnectRpc(token, connectNonce);
         return;
       }
-      // Handle RPC responses
       if (m.id && pend[m.id]) {
         const p = pend[m.id]; delete pend[m.id];
         (m.ok===false||m.error) ? p.rej(m.error||{message:'fail'}) : p.res(m.payload??m);
@@ -101,7 +160,7 @@ function sendConnectRpc(token, nonce) {
   rpc('connect', {
     minProtocol:3, maxProtocol:3,
     client:{id:'webchat',version:'2.0',platform:navigator.platform,mode:'webchat'},
-    role:'operator', scopes:['operator.read','operator.admin'], device:undefined, caps:[], 
+    role:'operator', scopes:['operator.read','operator.admin'], device:undefined, caps:[],
     auth:{token:token},
     userAgent:navigator.userAgent, locale:navigator.language
   }).then(r => {
@@ -139,6 +198,8 @@ function go(page) {
   if (page==='sessions') loadSessions();
   if (page==='cron') loadCron();
   if (page==='channels') loadChannels();
+  if (page==='markets') loadMarkets();
+  if (page==='settings') loadSettings();
   document.getElementById('sidebar').classList.remove('open');
 }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
@@ -169,6 +230,13 @@ function fmtTime(ms) {
 function fmtDate(ms) {
   if (!ms) return '--';
   return new Date(ms).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+}
+function fmtUptime(secs) {
+  if (!secs) return '--';
+  const d = Math.floor(secs/86400), h = Math.floor((secs%86400)/3600), m = Math.floor((secs%3600)/60);
+  if (d>0) return d+'d '+h+'h '+m+'m';
+  if (h>0) return h+'h '+m+'m';
+  return m+'m';
 }
 
 function cronHuman(sch) {
@@ -260,6 +328,7 @@ async function refreshAll() {
     ]);
     sessions = sessRes?.sessions || [];
     crons = cronRes?.jobs || [];
+    gwHealth = health;
 
     document.getElementById('s-gw').innerHTML = '<span style="color:var(--green)">Online</span>';
     if (health?.uptime) {
@@ -385,7 +454,9 @@ function sessionName(s) {
   if (key.includes('subagent:') || key.includes('openai:')) return '\ud83e\udd16 Sub-agent';
   if (key.includes('cron:')) return '\u23f0 Cron Run';
   if (s.displayName) return s.displayName.replace('telegram:','').replace('g-','');
-  return key.split(':').pop() || '?';
+  // Improved fallback: show key tail but trim "agent:main:" prefix if present
+  const tail = key.replace(/^agent:main:/, '').split(':').slice(-2).join(' · ');
+  return tail || key || '?';
 }
 
 function sessionEmoji(s) {
@@ -395,7 +466,20 @@ function sessionEmoji(s) {
   if (key.endsWith(':main')) return '\ud83c\udfe0';
   if (key.includes('subagent:')||key.includes('openai:')) return '\ud83e\udd16';
   if (key.includes('cron:')) return '\u23f0';
-  return '\u25cf';
+  // Better fallback: use first letter of session key
+  const name = (s.displayName || key || '').replace(/^agent:main:/, '');
+  const ch = name.charAt(0).toUpperCase();
+  return ch || '\ud83d\udcbb';
+}
+
+function sessionAviStyle(s) {
+  const key = s.key || '';
+  if (key.includes('topic:')) return 'background:var(--blue-dim)';
+  if (key.includes('direct:')) return 'background:var(--purple-dim)';
+  if (key.endsWith(':main')) return 'background:var(--green-dim)';
+  if (key.includes('subagent:')) return 'background:var(--amber-dim)';
+  if (key.includes('cron:')) return 'background:var(--accent-dim)';
+  return 'background:var(--bg-active);color:var(--text-secondary);font-size:11px;font-weight:700;font-family:var(--mono)';
 }
 
 // ── Sessions Page ──
@@ -431,11 +515,12 @@ async function loadSessions() {
 function sessionRowHTML(s) {
   const n = sessionName(s);
   const e = sessionEmoji(s);
+  const aviStyle = sessionAviStyle(s);
   const pct = s.totalTokens && s.contextTokens ? Math.round(s.totalTokens/s.contextTokens*100) : null;
   const pctColor = pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)';
   const chPill = s.channel==='telegram'?'info':s.channel==='bluebubbles'?'ok':'muted';
   return '<div class="session-row">' +
-    '<div class="session-avi" style="background:'+(s.kind==='group'?'var(--blue-dim)':'var(--purple-dim)')+'">'+e+'</div>' +
+    '<div class="session-avi" style="'+aviStyle+'">'+e+'</div>' +
     '<div class="session-info">' +
       '<div class="session-name">'+n+'</div>' +
       '<div class="session-detail">'+(s.model||'?')+' \u00b7 <span class="pill '+chPill+'">'+(s.channel||'?')+'</span></div>' +
@@ -544,10 +629,6 @@ async function showCronPanel(jobId) {
 
 async function runJob(id) { try { await rpc('cron.run',{jobId:id}); toast('Job triggered!'); } catch(e) { toast('Failed: '+(e.message||e)); } }
 async function toggleJob(id,enable) { try { await rpc('cron.update',{jobId:id,patch:{enabled:enable}}); toast(enable?'Enabled':'Disabled'); loadCron(); } catch(e) { toast('Failed: '+(e.message||e)); } }
-function triggerJob(name) {
-  const job = crons.find(j=>(j.name||'').toLowerCase().replace(/[^a-z]/g,'-')===name || j.name===name);
-  if (job) runJob(job.id); else toast('Job not found: '+name);
-}
 
 // ── Channels ──
 async function loadChannels() {
@@ -555,23 +636,186 @@ async function loadChannels() {
   try {
     const res = await rpc('channels.status',{probe:false,timeoutMs:5000});
     const icons = {telegram:'\u2708\ufe0f',whatsapp:'\ud83d\udcf1',discord:'\ud83c\udfae',slack:'\ud83d\udcbc',signal:'\ud83d\udd10',bluebubbles:'\ud83e\udee7',imessage:'\ud83c\udf4e'};
-    const arr = Array.isArray(res)?res:Object.entries(res||{}).map(([n,d])=>({name:n,...(typeof d==='object'?d:{})}));
 
-    if (!arr.length) { el.innerHTML='<div class="empty"><div class="emoji">\ud83d\udce1</div><div class="title">No channels</div></div>'; return; }
+    // New API shape: { channelMeta: [...], channels: { id: {...} } }
+    const meta = res?.channelMeta || [];
+    const statusMap = res?.channels || {};
 
-    el.innerHTML = arr.map(ch => {
-      const name = ch.name||ch.provider||'?';
-      const ok = ch.connected||ch.status==='ok'||ch.ok;
+    // Fallback: if old flat array shape
+    let items = [];
+    if (meta.length > 0) {
+      items = meta.map(m => {
+        const id = m.id || m.name;
+        const status = statusMap[id] || {};
+        return { id, label: m.label || id, ...status };
+      });
+    } else if (Array.isArray(res)) {
+      items = res.map(ch => ({ id: ch.name || ch.provider || '?', label: ch.label || ch.name || '?', ...ch }));
+    } else if (statusMap && Object.keys(statusMap).length > 0) {
+      items = Object.entries(statusMap).map(([id, status]) => ({ id, label: id, ...status }));
+    }
+
+    if (!items.length) { el.innerHTML='<div class="empty"><div class="emoji">\ud83d\udce1</div><div class="title">No channels configured</div></div>'; return; }
+
+    el.innerHTML = items.map(ch => {
+      const id = ch.id || '?';
+      const label = ch.label || id;
+      const icon = icons[id.toLowerCase()] || '\ud83d\udce1';
+      const running = ch.running === true;
+      const configured = ch.configured !== false;
+      const probeOk = ch.probe?.ok === true;
+      const linked = ch.linked !== false;
+      const ok = running && configured && (ch.probe ? probeOk : true);
+
+      // Build detail line
+      const details = [];
+      if (ch.mode) details.push(ch.mode);
+      if (ch.probe?.bot?.username) details.push('@'+ch.probe.bot.username);
+      if (ch.probe?.status) details.push('HTTP '+ch.probe.status);
+      if (ch.lastError && !ok) details.push(ch.lastError);
+      if (!configured) details.push('not configured');
+      else if (!running) details.push('stopped');
+
+      const statusText = ok ? '\ud83d\udfe2 Running' : (configured ? '\ud83d\udd34 Offline' : '\u26aa Not configured');
+
       return '<div class="channels-row">' +
-        '<span class="ch-icon">'+(icons[name.toLowerCase()]||'\ud83d\udce1')+'</span>' +
+        '<span class="ch-icon">'+icon+'</span>' +
         '<div class="ch-info">' +
-          '<div class="ch-name">'+name+'</div>' +
-          '<div class="ch-status">'+(ok?'\ud83d\udfe2 Connected':'\ud83d\udd34 Disconnected')+(ch.accountId?' \u00b7 '+ch.accountId:'')+'</div>' +
+          '<div class="ch-name">'+label+'</div>' +
+          '<div class="ch-status">'+statusText+(details.length?' \u00b7 '+details.join(' \u00b7 '):'')+'</div>' +
         '</div>' +
-        '<span class="pill '+(ok?'ok':'err')+'">'+(ok?'Online':'Offline')+'</span>' +
+        '<span class="pill '+(ok?'ok':configured?'err':'muted')+'">'+(ok?'Online':configured?'Offline':'N/A')+'</span>' +
       '</div>';
     }).join('');
   } catch(e) { el.innerHTML='<div class="empty"><div class="title">Failed: '+(e.message||e)+'</div></div>'; }
+}
+
+// ── Markets ──
+let marketsData = {}; // sym -> { price, change, changePct }
+
+async function fetchTicker(sym) {
+  try {
+    // Use allorigins CORS proxy to bypass browser CORS restrictions
+    const yahooUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym)+'?interval=1d&range=2d';
+    const proxyUrl = 'https://api.allorigins.win/raw?url='+encodeURIComponent(yahooUrl);
+    const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) throw new Error('HTTP '+resp.status);
+    const data = await resp.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) throw new Error('no result');
+    const meta = result.meta;
+    const price = meta.regularMarketPrice ?? meta.previousClose ?? null;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
+    const change = (price !== null && prevClose) ? price - prevClose : null;
+    const changePct = (change !== null && prevClose) ? (change/prevClose)*100 : null;
+    return { price, change, changePct, ok: true };
+  } catch {
+    return { price: null, change: null, changePct: null, ok: false };
+  }
+}
+
+function fmtPrice(p, sym) {
+  if (p === null || p === undefined) return '--';
+  // Rates are in basis points * 10 from Yahoo (^TNX = 4.5 = 4.5%)
+  if (['^TNX','^IRX','^TYX'].includes(sym)) return p.toFixed(2)+'%';
+  if (p >= 10000) return p.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+  if (p >= 100) return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4});
+}
+
+function fmtChg(pct) {
+  if (pct === null || pct === undefined) return { text: '--', cls: 'flat' };
+  const sign = pct >= 0 ? '+' : '';
+  return { text: sign+pct.toFixed(2)+'%', cls: pct > 0.01 ? 'up' : pct < -0.01 ? 'dn' : 'flat' };
+}
+
+function renderMarketsGrid(loading) {
+  const grid = document.getElementById('markets-grid');
+  grid.innerHTML = MARKET_SECTIONS.map(sec => {
+    const rows = sec.tickers.map(t => {
+      const d = marketsData[t.sym];
+      if (loading || !d) {
+        return '<div class="market-ticker-row">' +
+          '<span class="mkt-sym">'+t.sym.replace(/[^A-Z0-9.]/g,'')+'</span>' +
+          '<span class="mkt-name">'+t.name+'</span>' +
+          '<span class="mkt-price" style="color:var(--text-quaternary)">'+(loading?'...':'--')+'</span>' +
+          '<span class="mkt-chg flat">--</span>' +
+        '</div>';
+      }
+      const chg = fmtChg(d.changePct);
+      return '<div class="market-ticker-row">' +
+        '<span class="mkt-sym">'+t.sym.replace(/[\^=]/g,'').replace(/-USD$/,'')+'</span>' +
+        '<span class="mkt-name">'+t.name+'</span>' +
+        '<span class="mkt-price" style="color:'+(d.ok?(chg.cls==='up'?'var(--green)':chg.cls==='dn'?'var(--red)':'var(--text)'):'var(--text-quaternary)')+'">'+fmtPrice(d.price,t.sym)+'</span>' +
+        '<span class="mkt-chg '+chg.cls+'">'+chg.text+'</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="market-section">' +
+      '<div class="market-section-header">'+sec.icon+' '+sec.label+'</div>' +
+      rows +
+    '</div>';
+  }).join('');
+}
+
+async function loadMarkets() {
+  // Show loading state
+  renderMarketsGrid(true);
+  const ts = document.getElementById('markets-ts');
+  ts.textContent = 'Fetching...';
+
+  // Clear existing auto-refresh
+  if (marketsIv) { clearInterval(marketsIv); marketsIv = null; }
+
+  try {
+    // Fetch all tickers in parallel (batched to avoid rate limiting)
+    const allTickers = MARKET_SECTIONS.flatMap(s => s.tickers);
+
+    // Try CORS proxy first
+    const results = await Promise.allSettled(
+      allTickers.map(t => fetchTicker(t.sym).then(d => ({ sym: t.sym, ...d })))
+    );
+
+    let anyOk = false;
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        marketsData[r.value.sym] = r.value;
+        if (r.value.ok) anyOk = true;
+      }
+    }
+
+    renderMarketsGrid(false);
+
+    if (!anyOk) {
+      ts.textContent = 'CORS blocked — market data unavailable from browser. Use a server-side proxy.';
+      ts.style.color = 'var(--amber)';
+    } else {
+      const now = new Date();
+      ts.textContent = 'Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+      ts.style.color = '';
+    }
+  } catch(e) {
+    renderMarketsGrid(false);
+    ts.textContent = 'Error: '+(e.message||e);
+    ts.style.color = 'var(--red)';
+  }
+
+  // Auto-refresh every 60 seconds
+  marketsIv = setInterval(() => {
+    const pg = document.getElementById('page-markets');
+    if (pg && pg.style.display !== 'none') loadMarkets();
+  }, 60000);
+}
+
+// ── Settings ──
+function loadSettings() {
+  const urlVal = ls('url', '--');
+  document.getElementById('set-url').textContent = urlVal;
+  document.getElementById('set-status').innerHTML = isConn
+    ? '<span style="color:var(--green)">Connected</span>'
+    : '<span style="color:var(--red)">Disconnected</span>';
+  document.getElementById('set-version').textContent = gwHealth?.version ? 'OpenClaw '+gwHealth.version : '--';
+  document.getElementById('set-uptime').textContent = gwHealth?.uptime ? fmtUptime(gwHealth.uptime) : '--';
 }
 
 // ── Panel ──
@@ -600,5 +844,6 @@ document.addEventListener('keydown', e => {
   if (e.metaKey && e.key==='1') { e.preventDefault(); go('overview'); }
   if (e.metaKey && e.key==='2') { e.preventDefault(); go('sessions'); }
   if (e.metaKey && e.key==='3') { e.preventDefault(); go('cron'); }
+  if (e.metaKey && e.key==='4') { e.preventDefault(); go('markets'); }
   if (e.metaKey && e.shiftKey && e.key==='r') { e.preventDefault(); refreshAll(); toast('Refreshed'); }
 });

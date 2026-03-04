@@ -1,6 +1,6 @@
 // ── State ──
 let ws, rid=0, pend={}, isConn=false, sessions=[], crons=[], channels=null, gwInfo=null, gwHealth=null;
-let clockIv, countIv, marketsIv;
+let clockIv, countIv;
 
 // Topic name mapping
 const TOPIC_NAMES = {
@@ -13,73 +13,6 @@ const TOPIC_NAMES = {
 };
 
 // Markets config
-const MARKET_SECTIONS = [
-  {
-    id: 'indices', label: 'Indices', icon: '📊',
-    tickers: [
-      { sym: '^GSPC',  name: 'S&P 500' },
-      { sym: '^IXIC',  name: 'Nasdaq' },
-      { sym: '^DJI',   name: 'Dow Jones' },
-      { sym: '^RUT',   name: 'Russell 2000' }
-    ]
-  },
-  {
-    id: 'rates', label: 'Rates', icon: '🏦',
-    tickers: [
-      { sym: '^TNX',  name: '10Y Treasury' },
-      { sym: '^IRX',  name: '2Y Treasury' },
-      { sym: '^TYX',  name: '30Y Treasury' }
-    ]
-  },
-  {
-    id: 'fx', label: 'FX', icon: '💱',
-    tickers: [
-      { sym: 'DX-Y.NYB', name: 'DXY (Dollar Index)' },
-      { sym: 'EURUSD=X',  name: 'EUR/USD' },
-      { sym: 'JPY=X',     name: 'USD/JPY' },
-      { sym: 'GBPUSD=X',  name: 'GBP/USD' }
-    ]
-  },
-  {
-    id: 'commodities', label: 'Commodities', icon: '🪙',
-    tickers: [
-      { sym: 'GC=F',  name: 'Gold' },
-      { sym: 'SI=F',  name: 'Silver' },
-      { sym: 'CL=F',  name: 'Crude Oil' },
-      { sym: 'HG=F',  name: 'Copper' },
-      { sym: 'URA',   name: 'Uranium ETF (URA)' }
-    ]
-  },
-  {
-    id: 'crypto', label: 'Crypto', icon: '₿',
-    tickers: [
-      { sym: 'BTC-USD', name: 'Bitcoin' },
-      { sym: 'ETH-USD', name: 'Ethereum' },
-      { sym: 'SOL-USD', name: 'Solana' }
-    ]
-  },
-  {
-    id: 'airlines', label: 'Airlines', icon: '✈️',
-    tickers: [
-      { sym: 'DAL',  name: 'Delta Air Lines' },
-      { sym: 'AAL',  name: 'American Airlines' },
-      { sym: 'LUV',  name: 'Southwest Airlines' },
-      { sym: 'ALK',  name: 'Alaska Air' },
-      { sym: 'JBLU', name: 'JetBlue' },
-      { sym: 'UAL',  name: 'United Airlines' }
-    ]
-  },
-  {
-    id: 'watchlist', label: 'Watchlist', icon: '👁',
-    tickers: [
-      { sym: 'URA',  name: 'Uranium (URA)' },
-      { sym: 'COPX', name: 'Copper Miners (COPX)' },
-      { sym: 'GRID', name: 'Grid Infrastructure (GRID)' },
-      { sym: 'IAU',  name: 'Gold (IAU)' }
-    ]
-  }
-];
-
 // ── Persistence ──
 const ls = (k,d) => { try { return localStorage.getItem('g_'+k)||d } catch { return d } };
 const ss = (k,v) => { try { localStorage.setItem('g_'+k,v) } catch {} };
@@ -691,11 +624,19 @@ async function loadChannels() {
 }
 
 // ── Markets ──
-let marketsData = {}; // sym -> { price, change, changePct }
+let marketsJson = null;
+
+const MARKET_GROUPS = [
+  { id: 'indices',     icon: '\ud83d\udcca', label: 'Indices' },
+  { id: 'rates',       icon: '\ud83c\udfe6', label: 'Rates' },
+  { id: 'fx',          icon: '\ud83d\udcb1', label: 'FX' },
+  { id: 'commodities', icon: '\ud83e\ude99', label: 'Commodities' },
+  { id: 'crypto',      icon: '\u20bf',       label: 'Crypto' },
+  { id: 'airlines',    icon: '\u2708\ufe0f', label: 'Airlines' },
+  { id: 'watchlist',   icon: '\ud83d\udccc', label: 'Watchlist' }
+];
 
 async function fetchMarketsJson() {
-  // Read server-side generated market data JSON
-  // This file is refreshed by fetch_markets.py (run via cron or manually)
   const basePath = location.pathname.replace(/\/[^/]*$/, '');
   const url = basePath + '/assets/markets.json?_=' + Date.now();
   const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
@@ -703,89 +644,104 @@ async function fetchMarketsJson() {
   return await resp.json();
 }
 
-function fmtPrice(p, sym) {
+function fmtPrice(p, fmt) {
   if (p === null || p === undefined) return '--';
-  // Rates are in basis points * 10 from Yahoo (^TNX = 4.5 = 4.5%)
-  if (['^TNX','^IRX','^TYX'].includes(sym)) return p.toFixed(2)+'%';
-  if (p >= 10000) return p.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
-  if (p >= 100) return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  return p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:4});
+  if (fmt === 'yield') return p.toFixed(2) + '%';
+  if (p >= 10000) return p.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  if (p >= 100) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (p >= 1) return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
-function fmtChg(pct) {
-  if (pct === null || pct === undefined) return { text: '--', cls: 'flat' };
-  const sign = pct >= 0 ? '+' : '';
-  return { text: sign+pct.toFixed(2)+'%', cls: pct > 0.01 ? 'up' : pct < -0.01 ? 'dn' : 'flat' };
+function chgCell(pct) {
+  if (pct === null || pct === undefined) return '<td class="chg flat" style="text-align:right">--</td>';
+  var sign = pct >= 0 ? '+' : '';
+  var cls = pct > 0.01 ? 'up' : pct < -0.01 ? 'dn' : 'flat';
+  return '<td class="chg ' + cls + '" style="text-align:right">' + sign + pct.toFixed(2) + '%</td>';
+}
+
+function cleanSym(sym) {
+  return sym.replace(/[\^=]/g, '').replace(/-USD$/, '').replace(/\.NYB$/, '');
 }
 
 function renderMarketsGrid(loading) {
-  const grid = document.getElementById('markets-grid');
-  grid.innerHTML = MARKET_SECTIONS.map(sec => {
-    const rows = sec.tickers.map(t => {
-      const d = marketsData[t.sym];
-      if (loading || !d) {
-        return '<div class="market-ticker-row">' +
-          '<span class="mkt-sym">'+t.sym.replace(/[^A-Z0-9.]/g,'')+'</span>' +
-          '<span class="mkt-name">'+t.name+'</span>' +
-          '<span class="mkt-price" style="color:var(--text-quaternary)">'+(loading?'...':'--')+'</span>' +
-          '<span class="mkt-chg flat">--</span>' +
-        '</div>';
-      }
-      const chg = fmtChg(d.changePct);
-      return '<div class="market-ticker-row">' +
-        '<span class="mkt-sym">'+t.sym.replace(/[\^=]/g,'').replace(/-USD$/,'')+'</span>' +
-        '<span class="mkt-name">'+t.name+'</span>' +
-        '<span class="mkt-price" style="color:'+(d.ok?(chg.cls==='up'?'var(--green)':chg.cls==='dn'?'var(--red)':'var(--text)'):'var(--text-quaternary)')+'">'+fmtPrice(d.price,t.sym)+'</span>' +
-        '<span class="mkt-chg '+chg.cls+'">'+chg.text+'</span>' +
+  var grid = document.getElementById('markets-grid');
+  if (!marketsJson || loading) {
+    grid.innerHTML = MARKET_GROUPS.map(function(g) {
+      return '<div class="market-section">' +
+        '<div class="market-section-header">' + g.icon + ' ' + g.label + '</div>' +
+        '<div style="padding:20px;text-align:center;color:var(--text-quaternary);font-size:12px">' + (loading ? '<div class="spin" style="margin:0 auto 8px"></div>Loading...' : 'No data') + '</div>' +
       '</div>';
+    }).join('');
+    return;
+  }
+
+  var tickers = marketsJson.tickers || {};
+  var groups = marketsJson.groups || {};
+
+  grid.innerHTML = MARKET_GROUPS.map(function(g) {
+    var syms = groups[g.id] || [];
+    if (!syms.length) return '';
+
+    var rows = syms.map(function(sym) {
+      var d = tickers[sym];
+      if (!d || !d.ok) {
+        return '<tr><td class="sym">' + cleanSym(sym) + '</td><td class="name">--</td>' +
+          '<td class="price" style="text-align:right;color:var(--text-quaternary)">--</td>' +
+          '<td class="chg flat" style="text-align:right">--</td>' +
+          '<td class="chg flat" style="text-align:right">--</td>' +
+          '<td class="chg flat" style="text-align:right">--</td></tr>';
+      }
+      var dayC = d.dayPct !== null && d.dayPct !== undefined ? d.dayPct : (d.changePct || null);
+      var priceColor = dayC > 0.01 ? 'var(--green)' : dayC < -0.01 ? 'var(--red)' : 'var(--text)';
+      return '<tr>' +
+        '<td class="sym">' + cleanSym(sym) + '</td>' +
+        '<td class="name">' + (d.name || '') + '</td>' +
+        '<td class="price" style="text-align:right;color:' + priceColor + '">' + fmtPrice(d.price, d.format) + '</td>' +
+        chgCell(dayC) +
+        chgCell(d.mtdPct) +
+        chgCell(d.ytdPct) +
+      '</tr>';
     }).join('');
 
     return '<div class="market-section">' +
-      '<div class="market-section-header">'+sec.icon+' '+sec.label+'</div>' +
-      rows +
+      '<div class="market-section-header">' + g.icon + ' ' + g.label + '</div>' +
+      '<table class="mkt-table">' +
+        '<thead><tr><th>Ticker</th><th>Name</th><th style="text-align:right">Price</th><th style="text-align:right">Day</th><th style="text-align:right">MTD</th><th style="text-align:right">YTD</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
     '</div>';
   }).join('');
 }
 
 async function loadMarkets() {
   renderMarketsGrid(true);
-  const ts = document.getElementById('markets-ts');
+  var ts = document.getElementById('markets-ts');
   ts.textContent = 'Fetching...';
   ts.style.color = '';
 
-  if (marketsIv) { clearInterval(marketsIv); marketsIv = null; }
-
   try {
-    const json = await fetchMarketsJson();
-    const data = json.data || {};
-    let anyOk = false;
-    for (const [sym, v] of Object.entries(data)) {
-      marketsData[sym] = v;
-      if (v.ok) anyOk = true;
-    }
-
+    marketsJson = await fetchMarketsJson();
     renderMarketsGrid(false);
 
-    if (!anyOk) {
-      ts.textContent = 'No market data available. Run fetch_markets.py to refresh.';
-      ts.style.color = 'var(--amber)';
-    } else {
-      const age = json.ts ? Date.now() - json.ts : null;
-      const ageStr = age !== null ? (age < 60000 ? 'just now' : age < 3600000 ? Math.floor(age/60000)+'m ago' : Math.floor(age/3600000)+'h ago') : '';
-      ts.textContent = 'Updated ' + (json.ts ? new Date(json.ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}) : 'unknown') + (ageStr ? ' ('+ageStr+')' : '');
-      ts.style.color = age && age > 3600000 ? 'var(--amber)' : '';
+    var tickerCount = Object.keys(marketsJson.tickers || {}).length;
+    var okCount = Object.values(marketsJson.tickers || {}).filter(function(v) { return v.ok; }).length;
+    var age = marketsJson.ts ? Date.now() - marketsJson.ts : null;
+    var ageStr = '';
+    if (age !== null) {
+      if (age < 60000) ageStr = 'just now';
+      else if (age < 3600000) ageStr = Math.floor(age / 60000) + 'm ago';
+      else ageStr = Math.floor(age / 3600000) + 'h ago';
     }
-  } catch(e) {
+    ts.textContent = okCount + '/' + tickerCount + ' tickers \u00b7 ' +
+      (marketsJson.ts ? new Date(marketsJson.ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '?') +
+      (ageStr ? ' (' + ageStr + ')' : '');
+    ts.style.color = age && age > 3600000 ? 'var(--amber)' : '';
+  } catch (e) {
     renderMarketsGrid(false);
-    ts.textContent = 'Error loading market data: '+(e.message||e);
+    ts.textContent = 'Error: ' + (e.message || e);
     ts.style.color = 'var(--red)';
   }
-
-  // Auto-refresh every 60 seconds (re-reads the JSON)
-  marketsIv = setInterval(() => {
-    const pg = document.getElementById('page-markets');
-    if (pg && pg.style.display !== 'none') loadMarkets();
-  }, 60000);
 }
 
 // ── Settings ──

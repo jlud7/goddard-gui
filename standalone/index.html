@@ -272,6 +272,8 @@
     .stats-row { grid-template-columns: repeat(2, 1fr); }
     .card-grid.cols-2 { grid-template-columns: 1fr; }
     .markets-grid { grid-template-columns: 1fr !important; }
+    .mkt-table .name { display: none; }
+    .mkt-table th:nth-child(2) { display: none; }
   }
 
   /* Channels grid */
@@ -285,19 +287,24 @@
 
   /* Markets page */
   .markets-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  .markets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .markets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; margin-bottom: 24px; }
   .market-section { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-  .market-section-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-quaternary); display: flex; align-items: center; gap: 6px; }
-  .market-ticker-row { display: flex; align-items: center; padding: 9px 16px; transition: background .1s; }
-  .market-ticker-row:hover { background: var(--bg-hover); }
-  .market-ticker-row + .market-ticker-row { border-top: 1px solid var(--border); }
-  .mkt-sym { font-size: 13px; font-weight: 700; font-family: var(--mono); width: 60px; flex-shrink: 0; }
-  .mkt-name { font-size: 11px; color: var(--text-tertiary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .mkt-price { font-size: 13px; font-weight: 600; font-family: var(--mono); text-align: right; min-width: 70px; }
-  .mkt-chg { font-size: 11px; font-weight: 600; font-family: var(--mono); text-align: right; min-width: 58px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-  .mkt-chg.up { color: var(--green); background: var(--green-dim); }
-  .mkt-chg.dn { color: var(--red); background: var(--red-dim); }
-  .mkt-chg.flat { color: var(--text-tertiary); background: var(--bg-active); }
+  .market-section-header { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-quaternary); display: flex; align-items: center; gap: 6px; }
+  .mkt-table { width: 100%; border-collapse: collapse; }
+  .mkt-table th { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text-quaternary); padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  .mkt-table th:first-child { text-align: left; }
+  .mkt-table th:nth-child(2) { text-align: left; }
+  .mkt-table td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .mkt-table tr:last-child td { border-bottom: none; }
+  .mkt-table tr:hover td { background: var(--bg-hover); }
+  .mkt-table .sym { font-weight: 700; font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .mkt-table .name { font-size: 10px; color: var(--text-quaternary); }
+  .mkt-table .price { font-weight: 600; font-family: var(--mono); text-align: right; font-size: 12px; }
+  .mkt-table .chg { font-weight: 600; font-family: var(--mono); text-align: right; font-size: 11px; padding: 2px 5px; border-radius: 3px; }
+  .mkt-table .chg.up { color: var(--green); }
+  .mkt-table .chg.dn { color: var(--red); }
+  .mkt-table .chg.flat { color: var(--text-quaternary); }
+  .markets-timestamp { font-size: 11px; color: var(--text-tertiary); font-family: var(--mono); }
   .mkt-loading { padding: 20px 16px; color: var(--text-quaternary); font-size: 12px; text-align: center; }
   .markets-timestamp { font-size: 11px; color: var(--text-quaternary); text-align: right; margin-top: 8px; }
 
@@ -435,10 +442,10 @@
     </div>
 
     <!-- MARKETS -->
-    <div class="content page" id="page-markets" style="display:none" style="max-width:1100px">
-      <div class="section-header" style="margin-bottom:20px">
+    <div class="content page" id="page-markets" style="display:none;max-width:1100px">
+      <div class="section-header" style="margin-bottom:14px">
         <div class="section-title" style="font-size:16px;font-weight:700;color:var(--text)">Markets</div>
-        <div class="section-actions">
+        <div class="section-actions" style="gap:12px;align-items:center">
           <span id="markets-ts" class="markets-timestamp"></span>
           <button class="btn sm" data-action="refresh-markets">↻ Refresh</button>
         </div>

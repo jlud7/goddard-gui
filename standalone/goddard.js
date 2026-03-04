@@ -693,25 +693,14 @@ async function loadChannels() {
 // ── Markets ──
 let marketsData = {}; // sym -> { price, change, changePct }
 
-async function fetchTicker(sym) {
-  try {
-    // Use allorigins CORS proxy to bypass browser CORS restrictions
-    const yahooUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(sym)+'?interval=1d&range=2d';
-    const proxyUrl = 'https://api.allorigins.win/raw?url='+encodeURIComponent(yahooUrl);
-    const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) throw new Error('HTTP '+resp.status);
-    const data = await resp.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) throw new Error('no result');
-    const meta = result.meta;
-    const price = meta.regularMarketPrice ?? meta.previousClose ?? null;
-    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? null;
-    const change = (price !== null && prevClose) ? price - prevClose : null;
-    const changePct = (change !== null && prevClose) ? (change/prevClose)*100 : null;
-    return { price, change, changePct, ok: true };
-  } catch {
-    return { price: null, change: null, changePct: null, ok: false };
-  }
+async function fetchMarketsJson() {
+  // Read server-side generated market data JSON
+  // This file is refreshed by fetch_markets.py (run via cron or manually)
+  const basePath = location.pathname.replace(/\/[^/]*$/, '');
+  const url = basePath + '/assets/markets.json?_=' + Date.now();
+  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return await resp.json();
 }
 
 function fmtPrice(p, sym) {
@@ -759,48 +748,40 @@ function renderMarketsGrid(loading) {
 }
 
 async function loadMarkets() {
-  // Show loading state
   renderMarketsGrid(true);
   const ts = document.getElementById('markets-ts');
   ts.textContent = 'Fetching...';
+  ts.style.color = '';
 
-  // Clear existing auto-refresh
   if (marketsIv) { clearInterval(marketsIv); marketsIv = null; }
 
   try {
-    // Fetch all tickers in parallel (batched to avoid rate limiting)
-    const allTickers = MARKET_SECTIONS.flatMap(s => s.tickers);
-
-    // Try CORS proxy first
-    const results = await Promise.allSettled(
-      allTickers.map(t => fetchTicker(t.sym).then(d => ({ sym: t.sym, ...d })))
-    );
-
+    const json = await fetchMarketsJson();
+    const data = json.data || {};
     let anyOk = false;
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        marketsData[r.value.sym] = r.value;
-        if (r.value.ok) anyOk = true;
-      }
+    for (const [sym, v] of Object.entries(data)) {
+      marketsData[sym] = v;
+      if (v.ok) anyOk = true;
     }
 
     renderMarketsGrid(false);
 
     if (!anyOk) {
-      ts.textContent = 'CORS blocked — market data unavailable from browser. Use a server-side proxy.';
+      ts.textContent = 'No market data available. Run fetch_markets.py to refresh.';
       ts.style.color = 'var(--amber)';
     } else {
-      const now = new Date();
-      ts.textContent = 'Updated '+now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
-      ts.style.color = '';
+      const age = json.ts ? Date.now() - json.ts : null;
+      const ageStr = age !== null ? (age < 60000 ? 'just now' : age < 3600000 ? Math.floor(age/60000)+'m ago' : Math.floor(age/3600000)+'h ago') : '';
+      ts.textContent = 'Updated ' + (json.ts ? new Date(json.ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true}) : 'unknown') + (ageStr ? ' ('+ageStr+')' : '');
+      ts.style.color = age && age > 3600000 ? 'var(--amber)' : '';
     }
   } catch(e) {
     renderMarketsGrid(false);
-    ts.textContent = 'Error: '+(e.message||e);
+    ts.textContent = 'Error loading market data: '+(e.message||e);
     ts.style.color = 'var(--red)';
   }
 
-  // Auto-refresh every 60 seconds
+  // Auto-refresh every 60 seconds (re-reads the JSON)
   marketsIv = setInterval(() => {
     const pg = document.getElementById('page-markets');
     if (pg && pg.style.display !== 'none') loadMarkets();

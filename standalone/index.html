@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goddard</title>
+<style>
+  :root {
+    --bg: #09090b;
+    --bg-raised: #111113;
+    --bg-hover: #18181b;
+    --bg-active: #1f1f23;
+    --border: #27272a;
+    --border-hover: #3f3f46;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --text-quaternary: #52525b;
+    --accent: #818cf8;
+    --accent-dim: #818cf820;
+    --green: #4ade80;
+    --green-dim: #4ade8015;
+    --red: #f87171;
+    --red-dim: #f8717115;
+    --amber: #fbbf24;
+    --amber-dim: #fbbf2415;
+    --blue: #60a5fa;
+    --blue-dim: #60a5fa15;
+    --purple: #c084fc;
+    --purple-dim: #c084fc15;
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', system-ui, sans-serif;
+    --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--accent); color: #fff; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Layout */
+  .shell { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; background: var(--bg); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+  }
+  .sidebar-brand { padding: 16px 16px 12px; display: flex; align-items: center; gap: 10px; }
+  .sidebar-brand .logo { font-size: 22px; }
+  .sidebar-brand .name { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
+  .sidebar-brand .dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; }
+  .sidebar-brand .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .sidebar-brand .dot.off { background: var(--red); }
+
+  .sidebar-nav { flex: 1; padding: 4px 8px; overflow-y: auto; }
+  .nav-group-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--text-quaternary); padding: 14px 10px 5px; }
+  .nav-btn {
+    display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px;
+    font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer;
+    transition: all .12s; user-select: none; border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .nav-btn.active { background: var(--bg-active); color: var(--text); }
+  .nav-btn .ico { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+  .nav-btn .badge { margin-left: auto; font-size: 11px; font-weight: 600; background: var(--bg-active); color: var(--text-tertiary); padding: 1px 6px; border-radius: 6px; }
+  .nav-btn.active .badge { background: var(--accent-dim); color: var(--accent); }
+
+  .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-quaternary); }
+
+  /* Main */
+  .main { margin-left: 220px; flex: 1; min-width: 0; }
+
+  /* Top Bar */
+  .topbar {
+    position: sticky; top: 0; z-index: 40; background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 28px; height: 48px; display: flex; align-items: center; gap: 16px;
+    backdrop-filter: blur(12px); background: rgba(9,9,11,.85);
+  }
+  .topbar-title { font-size: 14px; font-weight: 600; }
+  .topbar-sub { font-size: 12px; color: var(--text-tertiary); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .topbar-clock { font-size: 12px; color: var(--text-tertiary); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* Market bar */
+  .market-bar {
+    background: var(--bg-raised); border-bottom: 1px solid var(--border);
+    padding: 8px 28px; display: flex; align-items: center; gap: 16px; font-size: 12px;
+  }
+  .market-status { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .market-status .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .market-progress { flex: 1; height: 3px; background: var(--border); border-radius: 2px; max-width: 200px; }
+  .market-progress .fill { height: 100%; border-radius: 2px; transition: width 1s; }
+  .market-info { color: var(--text-tertiary); }
+
+  /* Content */
+  .content { padding: 24px 28px; max-width: 960px; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat {
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; transition: border-color .15s;
+  }
+  .stat:hover { border-color: var(--border-hover); }
+  .stat .label { font-size: 11px; font-weight: 500; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+  .stat .val { font-size: 24px; font-weight: 700; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+  .stat .sub { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
+
+  /* Section */
+  .section { margin-bottom: 28px; }
+  .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .section-actions { margin-left: auto; display: flex; gap: 6px; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before { content: ''; position: absolute; left: 5px; top: 4px; bottom: 4px; width: 1px; background: var(--border); }
+  .tl-item {
+    position: relative; padding: 8px 0 8px 16px; display: flex; align-items: center; gap: 12px;
+    font-size: 13px; cursor: pointer; border-radius: 6px; margin-left: -8px; padding-left: 24px;
+    transition: background .12s;
+  }
+  .tl-item:hover { background: var(--bg-hover); }
+  .tl-item::before {
+    content: ''; position: absolute; left: 1px; width: 9px; height: 9px; border-radius: 50%;
+    border: 2px solid var(--border); background: var(--bg);
+  }
+  .tl-item.done::before { background: var(--green); border-color: var(--green); }
+  .tl-item.error::before { background: var(--red); border-color: var(--red); }
+  .tl-item.next::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .tl-item.pending::before { background: var(--bg); border-color: var(--text-quaternary); }
+  .tl-time { font-family: var(--mono); font-size: 11px; color: var(--text-tertiary); width: 65px; flex-shrink: 0; }
+  .tl-name { flex: 1; font-weight: 500; }
+  .tl-countdown { font-family: var(--mono); font-size: 11px; color: var(--text-quaternary); }
+  .tl-pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+
+  /* Cards grid */
+  .card-grid { display: grid; gap: 12px; }
+  .card-grid.cols-2 { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+
+  /* Card */
+  .card {
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; transition: all .15s; cursor: default;
+  }
+  .card.clickable { cursor: pointer; }
+  .card.clickable:hover { border-color: var(--accent); background: var(--bg-hover); }
+  .card-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .card-emoji { font-size: 20px; line-height: 1; }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name { font-size: 14px; font-weight: 600; }
+  .card-desc { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+  .card-meta-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-tertiary); }
+  .card-meta-item strong { color: var(--text-secondary); font-weight: 600; }
+
+  /* Pill */
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .2px; }
+  .pill.ok { background: var(--green-dim); color: var(--green); }
+  .pill.err { background: var(--red-dim); color: var(--red); }
+  .pill.warn { background: var(--amber-dim); color: var(--amber); }
+  .pill.info { background: var(--blue-dim); color: var(--blue); }
+  .pill.muted { background: var(--bg-active); color: var(--text-tertiary); }
+  .pill.accent { background: var(--accent-dim); color: var(--accent); }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; font-family: var(--font); border: 1px solid var(--border);
+    background: var(--bg-raised); color: var(--text-secondary); cursor: pointer; transition: all .12s;
+  }
+  .btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: .9; }
+  .btn.sm { padding: 4px 8px; font-size: 11px; }
+  .btn.ghost { background: transparent; border-color: transparent; }
+  .btn.ghost:hover { background: var(--bg-hover); }
+
+  /* Session row */
+  .session-row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px;
+    transition: background .12s; cursor: pointer;
+  }
+  .session-row:hover { background: var(--bg-hover); }
+  .session-row + .session-row { border-top: 1px solid var(--border); }
+  .session-avi { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .session-info { flex: 1; min-width: 0; }
+  .session-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-detail { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+  .session-right { text-align: right; flex-shrink: 0; }
+  .session-time { font-size: 11px; color: var(--text-tertiary); }
+
+  /* Context meter */
+  .ctx-meter { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .ctx-bar { width: 48px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .ctx-bar .fill { height: 100%; border-radius: 2px; transition: width .3s; }
+  .ctx-pct { font-size: 10px; color: var(--text-quaternary); font-family: var(--mono); }
+
+  /* Slide panel */
+  .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .panel-overlay.open { opacity: 1; pointer-events: auto; }
+  .panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--bg);
+    border-left: 1px solid var(--border); z-index: 101; transform: translateX(100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1); overflow-y: auto; padding: 24px;
+  }
+  .panel.open { transform: translateX(0); }
+  .panel-close { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--text-tertiary); font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .panel-close:hover { background: var(--bg-hover); color: var(--text); }
+  .panel h3 { font-size: 17px; font-weight: 700; margin-bottom: 3px; padding-right: 40px; }
+  .panel .panel-desc { font-size: 12px; color: var(--text-tertiary); margin-bottom: 20px; }
+  .panel-section { margin-bottom: 18px; }
+  .panel-section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--text-quaternary); margin-bottom: 8px; }
+  .panel-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .panel-row .k { color: var(--text-tertiary); }
+  .panel-row .v { font-weight: 500; text-align: right; max-width: 60%; word-break: break-word; }
+  .panel-task { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 11px; line-height: 1.7; color: var(--text-secondary); max-height: 180px; overflow-y: auto; font-family: var(--mono); white-space: pre-wrap; word-break: break-word; }
+  .panel-actions { display: flex; gap: 8px; margin-top: 16px; }
+  .panel-run-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+
+  /* Activity list */
+  .activity-row { display: flex; gap: 10px; padding: 8px 0; font-size: 12px; }
+  .activity-row + .activity-row { border-top: 1px solid var(--border); }
+  .activity-time { font-family: var(--mono); font-size: 10px; color: var(--text-quaternary); width: 50px; flex-shrink: 0; padding-top: 2px; }
+  .activity-content { flex: 1; color: var(--text-secondary); line-height: 1.5; }
+
+  /* Connect */
+  .connect-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+  .connect-box { width: min(400px, 100%); background: var(--bg-raised); border: 1px solid var(--border); border-radius: 14px; padding: 32px; }
+  .connect-box h1 { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 2px; }
+  .connect-box .sub { text-align: center; color: var(--text-tertiary); font-size: 12px; margin-bottom: 24px; }
+  .connect-box .field { margin-bottom: 14px; }
+  .connect-box label { display: block; font-size: 11px; font-weight: 600; color: var(--text-tertiary); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+  .connect-box input { width: 100%; padding: 9px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--mono); outline: none; transition: border-color .15s; }
+  .connect-box input:focus { border-color: var(--accent); }
+  .connect-box .error { color: var(--red); font-size: 12px; text-align: center; margin-bottom: 10px; display: none; }
+  .connect-box .hint { font-size: 11px; color: var(--text-quaternary); text-align: center; margin-top: 14px; }
+  .connect-box .hint code { color: var(--text-tertiary); font-family: var(--mono); }
+
+  /* Loading */
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--text-tertiary); font-size: 13px; gap: 8px; }
+  .spin { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+
+  /* Empty */
+  .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
+  .empty .emoji { font-size: 28px; margin-bottom: 8px; }
+  .empty .title { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 12px; z-index: 200; transform: translateY(80px); opacity: 0; transition: all .25s; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Mobile */
+  .mobile-bar { display: none; position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--bg); border-bottom: 1px solid var(--border); z-index: 45; padding: 0 16px; align-items: center; gap: 10px; }
+  .mobile-bar button { background: none; border: none; color: var(--text); font-size: 18px; cursor: pointer; }
+  .mobile-bar .title { font-size: 15px; font-weight: 700; }
+  @media (max-width: 768px) {
+    .mobile-bar { display: flex; }
+    .sidebar { transform: translateX(-100%); z-index: 60; }
+    .sidebar.open { transform: translateX(0); }
+    .main { margin-left: 0; }
+    .topbar { display: none; }
+    .content { padding: 64px 16px 24px; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .card-grid.cols-2 { grid-template-columns: 1fr; }
+  }
+
+  /* Channels grid */
+  .channels-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-raised); }
+  .channels-row + .channels-row { margin-top: 8px; }
+  .ch-icon { font-size: 22px; }
+  .ch-info { flex: 1; }
+  .ch-name { font-size: 14px; font-weight: 600; }
+  .ch-status { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<!-- CONNECT SCREEN -->
+<div id="connect-screen" class="connect-wrap">
+  <div class="connect-box">
+    <h1>🐕 Goddard</h1>
+    <div class="sub">Connect to OpenClaw Gateway</div>
+    <div id="conn-err" class="error"></div>
+    <div class="field">
+      <label>Gateway URL</label>
+      <input id="in-url" value="ws://127.0.0.1:18789">
+    </div>
+    <div class="field">
+      <label>Token</label>
+      <input id="in-token" type="password" placeholder="Paste gateway token">
+    </div>
+    <button class="btn primary" style="width:100%;justify-content:center;padding:10px;font-size:13px" id="btn-connect">Connect</button>
+    <div class="hint">Run <code>openclaw config get gateway.auth.token</code> to get your token</div>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div id="app" class="shell" style="display:none">
+  <div class="mobile-bar">
+    <button id="btn-toggle-sidebar">☰</button>
+    <span class="title">Goddard</span>
+  </div>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="logo">🐕</span>
+      <span class="name">Goddard</span>
+      <span class="dot" id="conn-dot"></span>
+    </div>
+    <div class="sidebar-nav">
+      <button class="nav-btn active" data-page="overview" data-action="go" data-target="overview"><span class="ico">◉</span> Overview</button>
+      <button class="nav-btn" data-page="sessions" data-action="go" data-target="sessions"><span class="ico">◎</span> Sessions <span class="badge" id="nav-sessions">0</span></button>
+      <button class="nav-btn" data-page="cron" data-action="go" data-target="cron"><span class="ico">◷</span> Cron Jobs <span class="badge" id="nav-cron">0</span></button>
+      <button class="nav-btn" data-page="channels" data-action="go" data-target="channels"><span class="ico">◈</span> Channels</button>
+      <div class="nav-group-label">Quick Actions</div>
+      <button class="nav-btn" data-action="trigger-job" data-job="premarket-report"><span class="ico">🌅</span> Run Premarket</button>
+      <button class="nav-btn" data-action="trigger-job" data-job="close-recap"><span class="ico">🔔</span> Run Close Recap</button>
+      <button class="nav-btn" data-action="trigger-job" data-job="sunday-futures"><span class="ico">🌙</span> Run Sunday Futures</button>
+      <div class="nav-group-label">System</div>
+      <button class="nav-btn" data-action="refresh"><span class="ico">↻</span> Refresh</button>
+      <button class="nav-btn" data-action="disconnect"><span class="ico">⏏</span> Disconnect</button>
+    </div>
+    <div class="sidebar-footer" id="sidebar-ver">OpenClaw</div>
+  </nav>
+
+  <div class="main">
+    <!-- Market Bar -->
+    <div class="market-bar" id="market-bar">
+      <div class="market-status"><span class="dot" id="mkt-dot"></span> <span id="mkt-label">--</span></div>
+      <div class="market-progress"><div class="fill" id="mkt-fill"></div></div>
+      <div class="market-info" id="mkt-info">--</div>
+      <div class="topbar-clock" id="clock">--:--</div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="content page" id="page-overview">
+      <div class="stats-row">
+        <div class="stat">
+          <div class="label">Gateway</div>
+          <div class="val" id="s-gw" style="color:var(--green)">--</div>
+          <div class="sub" id="s-gw-sub">--</div>
+        </div>
+        <div class="stat">
+          <div class="label">Sessions</div>
+          <div class="val" id="s-sess">--</div>
+          <div class="sub" id="s-sess-sub">--</div>
+        </div>
+        <div class="stat">
+          <div class="label">Cron Jobs</div>
+          <div class="val" id="s-cron">--</div>
+          <div class="sub" id="s-cron-sub">--</div>
+        </div>
+        <div class="stat">
+          <div class="label">Next Run</div>
+          <div class="val" id="s-next" style="font-size:20px">--</div>
+          <div class="sub" id="s-next-sub">--</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Today's Schedule</div>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title">Recent Sessions</div>
+          <div class="section-actions"><button class="btn sm ghost" data-action="go" data-target="sessions">View all →</button></div>
+        </div>
+        <div id="overview-sessions"></div>
+      </div>
+    </div>
+
+    <!-- SESSIONS -->
+    <div class="content page" id="page-sessions" style="display:none">
+      <div class="section-header" style="margin-bottom:16px">
+        <div class="section-title" style="font-size:16px;font-weight:700;color:var(--text)">Sessions</div>
+        <div class="section-actions"><button class="btn sm" data-action="refresh-sessions">↻ Refresh</button></div>
+      </div>
+      <div id="sessions-list"><div class="loading"><div class="spin"></div>Loading...</div></div>
+    </div>
+
+    <!-- CRON -->
+    <div class="content page" id="page-cron" style="display:none">
+      <div class="section-header" style="margin-bottom:16px">
+        <div class="section-title" style="font-size:16px;font-weight:700;color:var(--text)">Cron Jobs</div>
+        <div class="section-actions"><button class="btn sm" data-action="refresh-cron">↻ Refresh</button></div>
+      </div>
+      <div class="card-grid cols-2" id="cron-list"><div class="loading"><div class="spin"></div>Loading...</div></div>
+    </div>
+
+    <!-- CHANNELS -->
+    <div class="content page" id="page-channels" style="display:none">
+      <div class="section-header" style="margin-bottom:16px">
+        <div class="section-title" style="font-size:16px;font-weight:700;color:var(--text)">Channels</div>
+        <div class="section-actions"><button class="btn sm" data-action="refresh-channels">↻ Refresh</button></div>
+      </div>
+      <div id="channels-list"><div class="loading"><div class="spin"></div>Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Panel -->
+<div class="panel-overlay" id="panel-ov"></div>
+<div class="panel" id="panel"><button class="panel-close" id="btn-panel-close">✕</button><div id="panel-body"></div></div>
+
+<!-- Toast -->
+<div class="toast" id="toast-el"></div>
+
+<script src="assets/goddard.js"></script>
+<!-- removed inline script, now served from assets/goddard.js -->
+<!--
+
+// Topic name mapping (populated from session data)
+const TOPIC_NAMES = {
+  '1': 'General',
+  '5': 'Projects',
+  '8': 'Town Skware',
+  '28': 'Trading',
+  '72': 'Trading Reports',
+  '563': 'Dashboard'
+};
+
+// ── Persistence ──
+const ls = (k,d) => { try { return localStorage.getItem('g_'+k)||d } catch { return d } };
+const ss = (k,v) => { try { localStorage.setItem('g_'+k,v) } catch {} };
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('in-url').value = ls('url','ws://127.0.0.1:18789');
+  document.getElementById('in-token').value = ls('token','');
+  if (ls('token','')) doConnect();
+  startClock();
+});
+
+// ── WebSocket ──
+function doConnect() {
+  const url = document.getElementById('in-url').value.trim();
+  const token = document.getElementById('in-token').value.trim();
+  if (!url || !token) return connErr('Enter URL and token');
+  connErr('');
+  ss('url',url); ss('token',token);
+  try { ws = new WebSocket(url); } catch(e) { return connErr('Bad URL: '+e.message); }
+  ws.onopen = () => {
+    rpc('connect', {
+      minProtocol:3, maxProtocol:3,
+      client:{id:'goddard-dash',version:'2.0',platform:navigator.platform,mode:'webchat'},
+      role:'operator', scopes:[], device:null, caps:[], auth:{token},
+      userAgent:navigator.userAgent, locale:navigator.language
+    }).then(r => {
+      isConn=true; gwInfo=r;
+      document.getElementById('connect-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      updDot();
+      refreshAll();
+      startCountdowns();
+    }).catch(e => { connErr('Auth failed: '+(e.message||e)); ws.close(); });
+  };
+  ws.onmessage = ev => {
+    try {
+      const m = JSON.parse(ev.data);
+      if (m.id && pend[m.id]) {
+        const p = pend[m.id]; delete pend[m.id];
+        (m.ok===false||m.error) ? p.rej(m.error||{message:'fail'}) : p.res(m.payload??m);
+      }
+    } catch {}
+  };
+  ws.onclose = () => { isConn=false; updDot(); };
+  ws.onerror = () => connErr('Connection failed — is the gateway running?');
+}
+
+function rpc(method, params={}) {
+  return new Promise((res,rej) => {
+    const id = String(++rid);
+    pend[id] = {res,rej};
+    ws.send(JSON.stringify({id,method,params}));
+    setTimeout(() => { if (pend[id]) { delete pend[id]; rej({message:'timeout'}); } }, 15000);
+  });
+}
+
+function connErr(msg) {
+  const el = document.getElementById('conn-err');
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+}
+
+function doDisconnect() { ss('token',''); ws?.close(); location.reload(); }
+function updDot() { document.getElementById('conn-dot').className = 'dot '+(isConn?'on':'off'); }
+
+// ── Navigation ──
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.style.display='none');
+  document.getElementById('page-'+page).style.display='block';
+  document.querySelectorAll('.nav-btn[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page===page));
+  if (page==='sessions') loadSessions();
+  if (page==='cron') loadCron();
+  if (page==='channels') loadChannels();
+  document.getElementById('sidebar').classList.remove('open');
+}
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toast(msg) { const t=document.getElementById('toast-el'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+// ── Time ──
+function ago(ms) {
+  if (!ms) return 'never';
+  const d = Date.now()-ms;
+  if (d<60e3) return 'now';
+  if (d<3600e3) return Math.floor(d/60e3)+'m ago';
+  if (d<864e5) return Math.floor(d/36e5)+'h ago';
+  return Math.floor(d/864e5)+'d ago';
+}
+function until(ms) {
+  if (!ms) return '--';
+  const d = ms-Date.now();
+  if (d<0) return 'overdue';
+  if (d<60e3) return '<1m';
+  if (d<3600e3) return Math.floor(d/60e3)+'m';
+  if (d<864e5) { const h=Math.floor(d/36e5), m=Math.floor((d%36e5)/60e3); return h+'h '+m+'m'; }
+  return Math.floor(d/864e5)+'d';
+}
+function fmtTime(ms) {
+  if (!ms) return '--';
+  return new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+function fmtDate(ms) {
+  if (!ms) return '--';
+  return new Date(ms).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
+}
+
+function cronHuman(sch) {
+  if (!sch) return '??';
+  if (sch.kind==='cron') {
+    const [min,hour,,,dow] = sch.expr.split(' ');
+    const tz = sch.tz ? ' '+sch.tz.split('/')[1] : '';
+    const days = {'*':'Daily','0':'Sun','1-5':'Weekdays','0,6':'Weekends'};
+    const dayStr = days[dow] || dow.split(',').map(d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][+d]||d).join(', ');
+    const h=+hour, m=+min;
+    const ap = h>=12?'PM':'AM', h12 = h===0?12:h>12?h-12:h;
+    return `${h12}:${String(m).padStart(2,'0')} ${ap} · ${dayStr}${tz}`;
+  }
+  if (sch.kind==='every') return `Every ${Math.floor(sch.everyMs/60e3)}m`;
+  if (sch.kind==='at') return fmtDate(new Date(sch.at).getTime());
+  return '??';
+}
+
+function jobEmoji(n) {
+  if (!n) return '⚡';
+  const l=n.toLowerCase();
+  if (l.includes('premarket')||l.includes('morning')) return '🌅';
+  if (l.includes('close')||l.includes('recap')) return '🔔';
+  if (l.includes('sunday')||l.includes('future')) return '🌙';
+  if (l.includes('dashboard')||l.includes('nightly')) return '📊';
+  return '⚡';
+}
+
+// ── Market Status ──
+function updateMarket() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const h = et.getHours(), m = et.getMinutes(), day = et.getDay();
+  const mins = h*60+m;
+  const isWeekday = day>=1 && day<=5;
+
+  const dot = document.getElementById('mkt-dot');
+  const label = document.getElementById('mkt-label');
+  const fill = document.getElementById('mkt-fill');
+  const info = document.getElementById('mkt-info');
+
+  if (!isWeekday) {
+    dot.style.background='var(--text-quaternary)';
+    label.textContent='Market Closed';
+    fill.style.width='0%'; fill.style.background='var(--text-quaternary)';
+    info.textContent='Weekend';
+  } else if (mins < 4*60) {
+    dot.style.background='var(--text-quaternary)'; label.textContent='Overnight'; fill.style.width='0%'; info.textContent='Pre-market opens 4:00 AM';
+  } else if (mins < 9*60+30) {
+    dot.style.background='var(--amber)'; label.textContent='Pre-Market';
+    const pct = ((mins-240)/(570-240))*100;
+    fill.style.width=pct+'%'; fill.style.background='var(--amber)';
+    info.textContent=`Opens ${Math.floor((570-mins)/60)}h ${(570-mins)%60}m`;
+  } else if (mins < 16*60) {
+    dot.style.background='var(--green)'; label.textContent='Market Open';
+    const pct = ((mins-570)/(960-570))*100;
+    fill.style.width=pct+'%'; fill.style.background='var(--green)';
+    const rem = 960-mins;
+    info.textContent=`Closes in ${Math.floor(rem/60)}h ${rem%60}m`;
+  } else if (mins < 20*60) {
+    dot.style.background='var(--blue)'; label.textContent='After Hours';
+    const pct = ((mins-960)/(1200-960))*100;
+    fill.style.width=pct+'%'; fill.style.background='var(--blue)';
+    info.textContent='Extended hours';
+  } else {
+    dot.style.background='var(--text-quaternary)'; label.textContent='Market Closed';
+    fill.style.width='100%'; fill.style.background='var(--text-quaternary)'; info.textContent='Opens tomorrow';
+  }
+}
+
+function startClock() {
+  const tick = () => {
+    const now = new Date();
+    const et = now.toLocaleString('en-US',{timeZone:'America/New_York',weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+    document.getElementById('clock').textContent = et;
+    updateMarket();
+  };
+  tick();
+  clockIv = setInterval(tick, 1000);
+}
+
+// ── Data ──
+async function refreshAll() {
+  try {
+    const [sessRes, cronRes, health] = await Promise.all([
+      rpc('sessions.list',{limit:50}).catch(()=>({sessions:[]})),
+      rpc('cron.list',{includeDisabled:true}).catch(()=>({jobs:[]})),
+      rpc('status',{}).catch(()=>null)
+    ]);
+    sessions = sessRes?.sessions || [];
+    crons = cronRes?.jobs || [];
+
+    // Stats
+    document.getElementById('s-gw').innerHTML = '<span style="color:var(--green)">Online</span>';
+    if (health?.uptime) {
+      const h=Math.floor(health.uptime/3600), m=Math.floor((health.uptime%3600)/60);
+      document.getElementById('s-gw-sub').textContent = `${h}h ${m}m uptime`;
+    } else { document.getElementById('s-gw-sub').textContent = 'Connected'; }
+    if (health?.version) document.getElementById('sidebar-ver').textContent = 'OpenClaw '+health.version;
+
+    document.getElementById('s-sess').textContent = sessions.length;
+    const grp = sessions.filter(s=>s.kind==='group').length;
+    document.getElementById('s-sess-sub').textContent = grp+' topics, '+(sessions.length-grp)+' other';
+
+    const en = crons.filter(j=>j.enabled!==false);
+    const errs = crons.filter(j=>j.state?.lastRunStatus==='error');
+    document.getElementById('s-cron').textContent = en.length;
+    document.getElementById('s-cron-sub').innerHTML = errs.length ? `<span style="color:var(--red)">${errs.length} error${errs.length>1?'s':''}</span>` : 'All healthy';
+
+    const nxt = crons.filter(j=>j.enabled!==false&&j.state?.nextRunAtMs).sort((a,b)=>a.state.nextRunAtMs-b.state.nextRunAtMs)[0];
+    if (nxt) {
+      document.getElementById('s-next').textContent = until(nxt.state.nextRunAtMs);
+      document.getElementById('s-next-sub').textContent = nxt.name||'Unnamed';
+    }
+
+    document.getElementById('nav-sessions').textContent = sessions.length;
+    document.getElementById('nav-cron').textContent = crons.length;
+
+    renderTimeline();
+    renderOverviewSessions();
+  } catch(e) { toast('Error: '+(e.message||e)); }
+}
+
+function renderTimeline() {
+  const el = document.getElementById('timeline');
+  const now = Date.now();
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayEnd = todayStart.getTime() + 864e5;
+
+  // Get today's scheduled runs
+  const items = [];
+  for (const job of crons) {
+    if (job.enabled === false) continue;
+
+    // If lastRunAtMs is today, add as completed
+    if (job.state?.lastRunAtMs && job.state.lastRunAtMs >= todayStart.getTime() && job.state.lastRunAtMs < todayEnd) {
+      items.push({
+        time: job.state.lastRunAtMs,
+        name: job.name || 'Unnamed',
+        emoji: jobEmoji(job.name),
+        status: job.state.lastRunStatus === 'ok' ? 'done' : 'error',
+        sub: job.state.lastRunStatus === 'ok' ? `completed ${ago(job.state.lastRunAtMs)}` : job.state.lastError || 'error',
+        id: job.id
+      });
+    }
+
+    // If nextRunAtMs is today, add as upcoming
+    if (job.state?.nextRunAtMs && job.state.nextRunAtMs >= todayStart.getTime() && job.state.nextRunAtMs < todayEnd) {
+      // Don't double-count if same time as lastRun
+      if (!job.state?.lastRunAtMs || Math.abs(job.state.nextRunAtMs - job.state.lastRunAtMs) > 60000) {
+        const isNext = crons.filter(j=>j.enabled!==false&&j.state?.nextRunAtMs).sort((a,b)=>a.state.nextRunAtMs-b.state.nextRunAtMs)[0]?.id === job.id;
+        items.push({
+          time: job.state.nextRunAtMs,
+          name: job.name || 'Unnamed',
+          emoji: jobEmoji(job.name),
+          status: isNext ? 'next' : 'pending',
+          sub: until(job.state.nextRunAtMs),
+          countdown: job.state.nextRunAtMs,
+          id: job.id
+        });
+      }
+    }
+  }
+
+  items.sort((a,b) => a.time - b.time);
+
+  if (!items.length) {
+    el.innerHTML = '<div class="empty"><div class="emoji">📭</div><div class="title">No events scheduled today</div></div>';
+    return;
+  }
+
+  el.innerHTML = items.map(it => `
+    <div class="tl-item ${it.status}" onclick="showCronPanel('${it.id}')">
+      <span class="tl-time">${fmtTime(it.time)}</span>
+      <span style="font-size:15px">${it.emoji}</span>
+      <span class="tl-name">${it.name}</span>
+      <span class="tl-countdown" ${it.countdown?`data-cd="${it.countdown}"`:''}>${it.sub}</span>
+      ${it.status==='done' ? '<span class="pill ok">Done</span>' : it.status==='error' ? '<span class="pill err">Error</span>' : it.status==='next' ? '<span class="pill accent pulse">Next</span>' : ''}
+    </div>
+  `).join('');
+}
+
+function renderOverviewSessions() {
+  const el = document.getElementById('overview-sessions');
+  const sorted = [...sessions].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,6);
+  if (!sorted.length) { el.innerHTML='<div class="empty"><div class="title">No sessions</div></div>'; return; }
+
+  el.innerHTML = sorted.map(s => {
+    const n = sessionName(s);
+    const e = sessionEmoji(s);
+    const pct = s.totalTokens && s.contextTokens ? Math.round(s.totalTokens/s.contextTokens*100) : null;
+    const pctColor = pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)';
+    return `
+      <div class="session-row">
+        <div class="session-avi" style="background:${s.kind==='group'?'var(--blue-dim)':'var(--purple-dim)'}">${e}</div>
+        <div class="session-info">
+          <div class="session-name">${n}</div>
+          <div class="session-detail">${s.model||'?'} · ${s.channel||'?'}</div>
+        </div>
+        <div class="session-right">
+          <div class="session-time">${ago(s.updatedAt)}</div>
+          ${pct!==null ? `<div class="ctx-meter"><div class="ctx-bar"><div class="fill" style="width:${pct}%;background:${pctColor}"></div></div><span class="ctx-pct">${pct}%</span></div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function sessionName(s) {
+  const key = s.key || '';
+  // Extract topic name
+  const topicMatch = key.match(/topic:(\d+)/);
+  if (topicMatch) {
+    const topicId = topicMatch[1];
+    return TOPIC_NAMES[topicId] || `Topic ${topicId}`;
+  }
+  // Direct message
+  if (key.includes('direct:')) {
+    const phone = key.match(/direct:(.+)/)?.[1] || '';
+    if (phone.includes('+')) return '📱 ' + phone;
+    return 'DM ' + phone;
+  }
+  // Main
+  if (key.endsWith(':main')) return '🏠 Main Session';
+  // Sub-agents
+  if (key.includes('subagent:') || key.includes('openai:')) return '🤖 Sub-agent';
+  // Cron
+  if (key.includes('cron:')) return '⏰ Cron Run';
+  // Display name fallback
+  if (s.displayName) return s.displayName.replace('telegram:','').replace('g-','');
+  return key.split(':').pop() || '?';
+}
+
+function sessionEmoji(s) {
+  const key = s.key || '';
+  if (key.includes('topic:')) return '💬';
+  if (key.includes('direct:')) return '👤';
+  if (key.endsWith(':main')) return '🏠';
+  if (key.includes('subagent:')||key.includes('openai:')) return '🤖';
+  if (key.includes('cron:')) return '⏰';
+  return '●';
+}
+
+// ── Sessions Page ──
+async function loadSessions() {
+  const el = document.getElementById('sessions-list');
+  try {
+    const res = await rpc('sessions.list',{limit:50});
+    sessions = res?.sessions || [];
+    if (!sessions.length) { el.innerHTML='<div class="empty"><div class="emoji">💬</div><div class="title">No sessions</div></div>'; return; }
+
+    const sorted = [...sessions].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    // Group: topics, DMs, internal
+    const topics = sorted.filter(s=>s.key?.includes('topic:'));
+    const dms = sorted.filter(s=>s.key?.includes('direct:'));
+    const other = sorted.filter(s=>!s.key?.includes('topic:')&&!s.key?.includes('direct:'));
+
+    let html = '';
+    if (topics.length) {
+      html += '<div class="nav-group-label" style="padding:8px 0 4px">Telegram Topics</div>';
+      html += topics.map(s=>sessionRowHTML(s)).join('');
+    }
+    if (dms.length) {
+      html += '<div class="nav-group-label" style="padding:16px 0 4px">Direct Messages</div>';
+      html += dms.map(s=>sessionRowHTML(s)).join('');
+    }
+    if (other.length) {
+      html += '<div class="nav-group-label" style="padding:16px 0 4px">Internal Sessions</div>';
+      html += other.map(s=>sessionRowHTML(s)).join('');
+    }
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML='<div class="empty"><div class="title">Failed: '+(e.message||e)+'</div></div>'; }
+}
+
+function sessionRowHTML(s) {
+  const n = sessionName(s);
+  const e = sessionEmoji(s);
+  const pct = s.totalTokens && s.contextTokens ? Math.round(s.totalTokens/s.contextTokens*100) : null;
+  const pctColor = pct>80?'var(--red)':pct>60?'var(--amber)':'var(--accent)';
+  const chPill = s.channel==='telegram'?'info':s.channel==='bluebubbles'?'ok':'muted';
+  return `
+    <div class="session-row">
+      <div class="session-avi" style="background:${s.kind==='group'?'var(--blue-dim)':'var(--purple-dim)'}">${e}</div>
+      <div class="session-info">
+        <div class="session-name">${n}</div>
+        <div class="session-detail">${s.model||'?'} · <span class="pill ${chPill}">${s.channel||'?'}</span></div>
+      </div>
+      <div class="session-right">
+        <div class="session-time">${ago(s.updatedAt)}</div>
+        ${pct!==null ? `<div class="ctx-meter"><div class="ctx-bar"><div class="fill" style="width:${pct}%;background:${pctColor}"></div></div><span class="ctx-pct">${pct}%</span></div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// ── Cron Page ──
+async function loadCron() {
+  const el = document.getElementById('cron-list');
+  try {
+    const res = await rpc('cron.list',{includeDisabled:true});
+    crons = res?.jobs || [];
+    if (!crons.length) { el.innerHTML='<div class="empty"><div class="emoji">⏰</div><div class="title">No cron jobs</div></div>'; return; }
+
+    el.innerHTML = crons.map(j => {
+      const pill = j.enabled===false ? '<span class="pill warn">Disabled</span>'
+        : j.state?.lastRunStatus==='error' ? '<span class="pill err">Error</span>'
+        : j.state?.lastRunStatus==='ok' ? '<span class="pill ok">Healthy</span>'
+        : '<span class="pill info">Ready</span>';
+      const delivery = j.delivery?.mode || (j.sessionTarget==='main'?'main session':'announce');
+      const next = j.state?.nextRunAtMs;
+
+      return `
+        <div class="card clickable" onclick="showCronPanel('${j.id}')">
+          <div class="card-top">
+            <span class="card-emoji">${jobEmoji(j.name)}</span>
+            <div class="card-info">
+              <div class="card-name">${j.name||'Unnamed'}</div>
+              <div class="card-desc">${cronHuman(j.schedule)}</div>
+            </div>
+            ${pill}
+          </div>
+          <div class="card-meta">
+            <div class="card-meta-item">⏱ Next: <strong ${next?`data-cd="${next}"`:''}>${next?until(next):'--'}</strong></div>
+            <div class="card-meta-item">📤 ${delivery}</div>
+            <div class="card-meta-item">🔄 ${j.state?.lastRunAtMs?ago(j.state.lastRunAtMs):'never'}</div>
+            ${j.state?.consecutiveErrors?`<div class="card-meta-item" style="color:var(--red)">⚠ ${j.state.consecutiveErrors} errors</div>`:''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { el.innerHTML='<div class="empty"><div class="title">Failed: '+(e.message||e)+'</div></div>'; }
+}
+
+async function showCronPanel(jobId) {
+  const job = crons.find(j=>j.id===jobId);
+  if (!job) return;
+  const body = document.getElementById('panel-body');
+
+  body.innerHTML = `
+    <h3>${jobEmoji(job.name)} ${job.name||'Unnamed'}</h3>
+    <div class="panel-desc">${job.description||'No description'}</div>
+    <div class="panel-section">
+      <div class="panel-section-title">Schedule</div>
+      <div class="panel-row"><span class="k">Schedule</span><span class="v">${cronHuman(job.schedule)}</span></div>
+      <div class="panel-row"><span class="k">Expression</span><span class="v" style="font-family:var(--mono);font-size:11px">${job.schedule?.expr||'--'}</span></div>
+      <div class="panel-row"><span class="k">Timezone</span><span class="v">${job.schedule?.tz||'UTC'}</span></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Status</div>
+      <div class="panel-row"><span class="k">Enabled</span><span class="v">${job.enabled!==false?'✅':'❌'}</span></div>
+      <div class="panel-row"><span class="k">Next Run</span><span class="v">${job.state?.nextRunAtMs?fmtDate(job.state.nextRunAtMs)+' ('+until(job.state.nextRunAtMs)+')':'--'}</span></div>
+      <div class="panel-row"><span class="k">Last Run</span><span class="v">${job.state?.lastRunAtMs?fmtDate(job.state.lastRunAtMs):'Never'}</span></div>
+      <div class="panel-row"><span class="k">Last Status</span><span class="v">${job.state?.lastRunStatus==='ok'?'✅ OK':job.state?.lastRunStatus==='error'?'❌ Error':'--'}</span></div>
+      ${job.state?.lastError?`<div class="panel-row"><span class="k">Error</span><span class="v" style="color:var(--red)">${job.state.lastError}</span></div>`:''}
+      ${job.state?.lastDurationMs?`<div class="panel-row"><span class="k">Duration</span><span class="v">${(job.state.lastDurationMs/1000).toFixed(1)}s</span></div>`:''}
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Config</div>
+      <div class="panel-row"><span class="k">Session</span><span class="v">${job.sessionTarget||'--'}</span></div>
+      <div class="panel-row"><span class="k">Delivery</span><span class="v">${job.delivery?.mode||'default'}</span></div>
+      <div class="panel-row"><span class="k">Payload</span><span class="v">${job.payload?.kind||'--'}</span></div>
+      ${job.payload?.model?`<div class="panel-row"><span class="k">Model</span><span class="v">${job.payload.model}</span></div>`:''}
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Task</div>
+      <div class="panel-task">${(job.payload?.text||job.payload?.message||'--').replace(/</g,'&lt;')}</div>
+    </div>
+    <div class="panel-actions">
+      <button class="btn primary" onclick="runJob('${job.id}')">▶ Run Now</button>
+      <button class="btn" onclick="toggleJob('${job.id}',${job.enabled===false})">${job.enabled===false?'Enable':'Disable'}</button>
+    </div>
+    <div class="panel-section" style="margin-top:20px">
+      <div class="panel-section-title">Recent Runs</div>
+      <div id="panel-runs"><div class="loading" style="padding:8px"><div class="spin"></div></div></div>
+    </div>
+  `;
+  openPanel();
+
+  try {
+    const r = await rpc('cron.runs',{jobId:job.id});
+    const runs = r?.runs || [];
+    const el = document.getElementById('panel-runs');
+    if (!runs.length) { el.innerHTML='<div style="font-size:11px;color:var(--text-quaternary);padding:4px 0">No history</div>'; return; }
+    el.innerHTML = runs.slice(0,10).map(r => `
+      <div class="panel-run-item">
+        <span>${r.status==='ok'?'✅':r.status==='error'?'❌':'⏳'}</span>
+        <span style="flex:1">${fmtDate(r.startedAtMs||r.scheduledAtMs)}</span>
+        <span style="color:var(--text-quaternary)">${r.durationMs?(r.durationMs/1000).toFixed(1)+'s':'--'}</span>
+      </div>
+    `).join('');
+  } catch { document.getElementById('panel-runs').innerHTML='<div style="font-size:11px;color:var(--text-quaternary)">Could not load</div>'; }
+}
+
+async function runJob(id) { try { await rpc('cron.run',{jobId:id}); toast('Job triggered!'); } catch(e) { toast('Failed: '+(e.message||e)); } }
+async function toggleJob(id,enable) { try { await rpc('cron.update',{jobId:id,patch:{enabled:enable}}); toast(enable?'Enabled':'Disabled'); loadCron(); } catch(e) { toast('Failed: '+(e.message||e)); } }
+function triggerJob(name) {
+  const job = crons.find(j=>(j.name||'').toLowerCase().replace(/[^a-z]/g,'-')===name || j.name===name);
+  if (job) runJob(job.id); else toast('Job not found: '+name);
+}
+
+// ── Channels ──
+async function loadChannels() {
+  const el = document.getElementById('channels-list');
+  try {
+    const res = await rpc('channels.status',{probe:false,timeoutMs:5000});
+    const icons = {telegram:'✈️',whatsapp:'📱',discord:'🎮',slack:'💼',signal:'🔐',bluebubbles:'🫧',imessage:'🍎'};
+    const arr = Array.isArray(res)?res:Object.entries(res||{}).map(([n,d])=>({name:n,...(typeof d==='object'?d:{})}));
+
+    if (!arr.length) { el.innerHTML='<div class="empty"><div class="emoji">📡</div><div class="title">No channels</div></div>'; return; }
+
+    el.innerHTML = arr.map(ch => {
+      const name = ch.name||ch.provider||'?';
+      const ok = ch.connected||ch.status==='ok'||ch.ok;
+      return `
+        <div class="channels-row">
+          <span class="ch-icon">${icons[name.toLowerCase()]||'📡'}</span>
+          <div class="ch-info">
+            <div class="ch-name">${name}</div>
+            <div class="ch-status">${ok?'🟢 Connected':'🔴 Disconnected'}${ch.accountId?' · '+ch.accountId:''}</div>
+          </div>
+          <span class="pill ${ok?'ok':'err'}">${ok?'Online':'Offline'}</span>
+        </div>
+      `;
+    }).join('');
+  } catch(e) { el.innerHTML='<div class="empty"><div class="title">Failed: '+(e.message||e)+'</div></div>'; }
+}
+
+// ── Panel ──
+function openPanel() { document.getElementById('panel').classList.add('open'); document.getElementById('panel-ov').classList.add('open'); }
+function closePanel() { document.getElementById('panel').classList.remove('open'); document.getElementById('panel-ov').classList.remove('open'); }
+
+// ── Countdowns ──
+function startCountdowns() {
+  if (countIv) clearInterval(countIv);
+  countIv = setInterval(() => {
+    document.querySelectorAll('[data-cd]').forEach(el => {
+      const ms = parseInt(el.dataset.cd);
+      if (ms) el.textContent = until(ms);
+    });
+    const nxt = crons.filter(j=>j.enabled!==false&&j.state?.nextRunAtMs).sort((a,b)=>a.state.nextRunAtMs-b.state.nextRunAtMs)[0];
+    if (nxt) document.getElementById('s-next').textContent = until(nxt.state.nextRunAtMs);
+  }, 15000);
+}
+
+// Auto-refresh
+setInterval(() => { if (isConn) refreshAll(); }, 120000);
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') closePanel();
+  if (e.metaKey && e.key==='1') { e.preventDefault(); go('overview'); }
+  if (e.metaKey && e.key==='2') { e.preventDefault(); go('sessions'); }
+  if (e.metaKey && e.key==='3') { e.preventDefault(); go('cron'); }
+  if (e.metaKey && e.shiftKey && e.key==='r') { e.preventDefault(); refreshAll(); toast('Refreshed'); }
+});
+-->
+</body>
+</html>
